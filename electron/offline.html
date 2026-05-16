@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>No Internet Connection</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111118;
+      color: #e0e0ee;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      user-select: none;
+    }
+
+    .card {
+      text-align: center;
+      max-width: 420px;
+      padding: 48px 40px;
+      background: #1a1a26;
+      border: 1px solid #2a2a3a;
+      border-radius: 12px;
+    }
+
+    .icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 24px;
+      opacity: 0.5;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #f0f0ff;
+      margin-bottom: 12px;
+      letter-spacing: -0.2px;
+    }
+
+    p {
+      font-size: 14px;
+      color: #8888a8;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    button {
+      background: #3b6fd4;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 10px 28px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #4a7ee3; }
+    button:active { background: #2f5cb8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <svg class="icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="30" stroke="#8888a8" stroke-width="2"/>
+      <path d="M20 32 Q32 14 44 32" stroke="#8888a8" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <path d="M14 22 Q32 2 50 22" stroke="#8888a8" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <circle cx="32" cy="42" r="3" fill="#8888a8"/>
+      <line x1="16" y1="16" x2="48" y2="48" stroke="#cc4444" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <h1>No Internet Connection</h1>
+    <p>Ledger requires an internet connection.<br>Please check your connection and try again.</p>
+    <button id="retry-btn">Retry</button>
+  </div>
+  <script>
+    document.getElementById('retry-btn').addEventListener('click', () => {
+      window.electronAPI.retry();
+    });
+  </script>
+</body>
+</html>

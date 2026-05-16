@@ -1,93 +1,19 @@
 'use strict';
 
-const { app, BrowserWindow, dialog } = require('electron');
-const { spawn } = require('child_process');
+const { app, BrowserWindow, ipcMain, net } = require('electron');
 const path = require('path');
-const http = require('http');
 
-const FLASK_PORT = 5050;
-const FLASK_URL = `http://localhost:${FLASK_PORT}`;
+const APP_URL = 'https://ledger-jdam.onrender.com';
 
-let flaskProcess = null;
 let mainWindow = null;
 
-// ---------------------------------------------------------------------------
-// Flask
-// ---------------------------------------------------------------------------
-
-function getAppRoot() {
-  // In production the app root is the directory containing the .app bundle's
-  // Resources folder; in development it's the repo root.
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, '..');
-  }
-  return path.join(__dirname, '..');
-}
-
-function getPythonPath() {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'venv', 'bin', 'python');
-  }
-  return path.join(__dirname, '..', 'venv', 'bin', 'python');
-}
-
-function startFlask() {
-  return new Promise((resolve, reject) => {
-    const python = path.join(__dirname, '..', 'venv', 'bin', 'python');
-    const script = path.join(__dirname, '..', 'app.py');
-    const cwd = path.join(__dirname, '..');
-
-    const env = Object.assign({}, process.env, { LEDGER_ENV: 'production' });
-
-    flaskProcess = spawn(python, [script], { cwd, env });
-
-    flaskProcess.stdout.on('data', data => {
-      console.log('[Flask]', data.toString().trim());
-    });
-
-    flaskProcess.stderr.on('data', data => {
-      console.error('[Flask err]', data.toString().trim());
-    });
-
-    flaskProcess.on('error', err => {
-      reject(new Error(`Failed to spawn Flask: ${err.message}`));
-    });
-
-    flaskProcess.on('exit', (code, signal) => {
-      if (code !== 0 && code !== null) {
-        console.error(`Flask exited with code ${code}`);
-      }
-    });
-
-    // Poll until Flask is ready
-    const start = Date.now();
-    let attempt = 0;
-    const interval = setInterval(() => {
-      attempt += 1;
-      console.log(`Waiting for Flask... attempt ${attempt}`);
-      http.get(FLASK_URL, res => {
-        clearInterval(interval);
-        resolve();
-      }).on('error', () => {
-        if (Date.now() - start > 60000) {
-          clearInterval(interval);
-          reject(new Error('Flask did not start within 60 seconds.'));
-        }
-      });
-    }, 1000);
-  });
-}
-
-function stopFlask() {
-  if (flaskProcess) {
-    flaskProcess.kill('SIGTERM');
-    flaskProcess = null;
+function loadApp() {
+  if (net.isOnline()) {
+    mainWindow.loadURL(APP_URL);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'offline.html'));
   }
 }
-
-// ---------------------------------------------------------------------------
-// Window
-// ---------------------------------------------------------------------------
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -100,32 +26,26 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(FLASK_URL);
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode) => {
+    // -3 is ERR_ABORTED (e.g. a redirect cancelled the load) — ignore it
+    if (errorCode !== -3) {
+      mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  loadApp();
 }
 
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
-
-app.whenReady().then(async () => {
-  try {
-    await startFlask();
-    createWindow();
-  } catch (err) {
-    dialog.showErrorBox('Ledger — Startup Error', err.message);
-    app.quit();
-  }
+ipcMain.on('retry', () => {
+  if (mainWindow) loadApp();
 });
+
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  stopFlask();
   app.quit();
-});
-
-app.on('before-quit', () => {
-  stopFlask();
 });

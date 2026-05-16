@@ -1,2 +1,7 @@
-// Preload script — placeholder for future context bridge APIs
 'use strict';
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  retry: () => ipcRenderer.send('retry'),
+});
