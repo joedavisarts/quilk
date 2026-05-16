@@ -1,17 +1,19 @@
 {
   "$schema": "https://schema.railpack.com",
   "provider": "python",
-  "aptPackages": [
-    "libpango-1.0-0",
-    "libpangoft2-1.0-0",
-    "libpangocairo-1.0-0",
-    "libgdk-pixbuf2.0-0",
-    "libffi-dev",
-    "libcairo2",
-    "libgobject-2.0-0"
-  ],
   "build": {
     "commands": ["pip install -r requirements.txt"]
+  },
+  "deploy": {
+    "aptPackages": [
+      "libpango-1.0-0",
+      "libpangoft2-1.0-0",
+      "libpangocairo-1.0-0",
+      "libgdk-pixbuf2.0-0",
+      "libffi-dev",
+      "libcairo2",
+      "libgobject-2.0-0"
+    ]
   },
   "start": {
     "command": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
