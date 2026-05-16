@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Send {{ doc.doc_number }} — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Send to Client</h1>
+    <span class="page-sub">
+      <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>
+      &nbsp;{{ doc.doc_number }}
+    </span>
+  </div>
+</div>
+
+{% if error %}
+<div class="flash flash-error">Failed to send: {{ error }}</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('send_document', doc_id=doc.id) }}">
+
+  <div class="form-grid">
+    <div class="form-card">
+      <h2 class="card-title">Email Details</h2>
+
+      <div class="field">
+        <label>To</label>
+        <input type="email" name="to_email" value="{{ to_email }}" required placeholder="recipient@example.com" />
+      </div>
+
+      <div class="field">
+        <label>Subject</label>
+        <input type="text" name="subject" value="{{ subject }}" required />
+      </div>
+
+      <div class="field">
+        <label>Attachment</label>
+        <div style="padding-top:4px;">
+          <span class="attachment-pill">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="opacity:0.7;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"/></svg>
+            {{ pdf_filename }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h2 class="card-title">Email Body Preview</h2>
+      <div class="email-preview">{{ email_body }}</div>
+      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">
+        Followed by sign-off: Warmest Regards, Joe Davis · Musical Director &amp; Multi-Instrumentalist
+      </p>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-gold">Send Email</button>
+  </div>
+
+</form>
+{% endblock %}

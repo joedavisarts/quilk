@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% set type_label = {'invoice': 'Invoice', 'quote': 'Quote', 'receipt': 'Receipt'} %}
+{% block title %}New {{ type_label[doc_type] }} — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>New {{ type_label[doc_type] }}</h1>
+</div>
+
+<form id="doc-form" method="POST" action="{{ url_for('new_document', doc_type=doc_type) }}">
+  <input type="hidden" name="line_items_json" id="line_items_json" value="[]" />
+
+  <div class="form-grid">
+
+    <!-- CLIENT SECTION -->
+    <div class="form-card">
+      <h2 class="card-title">Client</h2>
+
+      <div class="field">
+        <label>Select Existing Client</label>
+        <select name="client_id" id="client_select">
+          <option value="">— Choose client —</option>
+          {% for c in clients %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div id="template-row" class="field hidden">
+        <label>Load Template</label>
+        <select id="template_select">
+          <option value="">— None —</option>
+        </select>
+        <button type="button" class="btn btn-sm btn-outline" id="load-template-btn">Load</button>
+      </div>
+
+      <div class="divider-or">or create new</div>
+
+      <div id="new-client-fields">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" name="new_client_name" id="new_client_name" placeholder="Full name / Company" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Email</label>
+            <input type="email" name="new_client_email" placeholder="email@example.com" />
+          </div>
+          <div class="field">
+            <label>Phone</label>
+            <input type="text" name="new_client_phone" placeholder="+1 555 000 0000" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Address Line 1</label>
+          <input type="text" name="new_client_addr1" />
+        </div>
+        <div class="field">
+          <label>Address Line 2</label>
+          <input type="text" name="new_client_addr2" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>City</label>
+            <input type="text" name="new_client_city" />
+          </div>
+          <div class="field">
+            <label>Country</label>
+            <input type="text" name="new_client_country" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DOCUMENT META -->
+    <div class="form-card">
+      <h2 class="card-title">Document Details</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date_issued" value="{{ today }}" required />
+        </div>
+        <div class="field">
+          <label>Currency</label>
+          <select name="currency" id="currency-select">
+            <option value="USD">USD</option>
+            <option value="JMD">JMD</option>
+            <option value="GBP">GBP</option>
+            <option value="EUR">EUR</option>
+            <option value="CAD">CAD</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea name="notes" rows="3" placeholder="Any additional notes…"></textarea>
+      </div>
+    </div>
+
+  </div><!-- /form-grid -->
+
+  <!-- LINE ITEMS -->
+  <div class="form-card full-width">
+    <h2 class="card-title">Line Items</h2>
+    <table class="line-items-table" id="line-items-table">
+      <thead>
+        <tr>
+          <th style="width:46%">Description</th>
+          <th style="width:11%">Qty</th>
+          <th style="width:19%">Unit Price</th>
+          <th style="width:12%">Total</th>
+          <th style="width:6%"></th>
+          <th style="width:6%"></th>
+        </tr>
+      </thead>
+      <tbody id="line-items-body">
+        <!-- rows added by JS -->
+      </tbody>
+    </table>
+    <div class="line-items-toolbar">
+      <button type="button" class="btn btn-sm btn-outline" id="add-line-btn">+ Add Line</button>
+      <button type="button" class="btn btn-sm btn-outline" id="import-items-btn">&#8645; Import Items</button>
+    </div>
+  </div>
+
+  {% if doc_type == 'invoice' %}
+  <!-- PAY BY DATE -->
+  <div class="form-card full-width">
+    <h2 class="card-title">Payment Due Date</h2>
+    <div class="field" style="max-width:280px;">
+      <label>Pay By Date</label>
+      <input type="date" name="pay_by_date" id="pay_by_date" />
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- TOTALS -->
+  <div class="form-card full-width">
+    <h2 class="card-title">Totals</h2>
+    <div class="totals-grid">
+      <div class="totals-left">
+        <div class="field-row">
+          <div class="field">
+            <label>Discount</label>
+            <input type="number" step="0.01" min="0" id="discount_val" name="discount_val" value="0" />
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <select name="discount_type" id="discount_type">
+              <option value="flat">Flat</option>
+              <option value="percent">%</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Tax</label>
+            <input type="number" step="0.01" min="0" id="tax_val" name="tax_val" value="0" />
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <select name="tax_type" id="tax_type">
+              <option value="percent" selected>%</option>
+              <option value="flat">Flat</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Paid Amount</label>
+          <input type="number" step="0.01" min="0" id="paid_amount" name="paid_amount" value="0" />
+        </div>
+      </div>
+      <div class="totals-right">
+        <div class="total-row"><span>Subtotal</span><span id="t-subtotal">0.00</span></div>
+        <div class="total-row"><span>Discount</span><span id="t-discount">0.00</span></div>
+        <div class="total-row"><span>Tax</span><span id="t-tax">0.00</span></div>
+        <div class="total-row"><span>Paid</span><span id="t-paid">0.00</span></div>
+        <div class="total-row total-due"><span>Amount Due</span><span id="t-due">0.00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVE TEMPLATE -->
+  <div class="form-card full-width">
+    <h2 class="card-title">Save as Template (optional)</h2>
+    <div class="field">
+      <label>Template Name</label>
+      <input type="text" name="save_template_name" placeholder="e.g. Church — Monthly Bass" />
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="form-actions">
+    <button type="button" id="preview-btn" class="btn btn-outline">Preview PDF</button>
+    <button type="submit" class="btn btn-gold">Save &amp; Generate PDF</button>
+  </div>
+
+</form>
+
+<!-- IMPORT ITEMS MODAL -->
+<div class="modal-overlay hidden" id="import-modal">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Import Items">
+    <div class="modal-header">
+      <h3>Import Items from Document</h3>
+      <button type="button" class="modal-close" id="modal-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-search">
+      <input type="text" id="modal-search-input" placeholder="Search by client name or document number…" autocomplete="off" />
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="empty-state" style="padding:24px;text-align:center;">Loading documents…</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-sm" id="modal-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DOC_TYPE = "{{ doc_type }}";
+</script>
+{% endblock %}

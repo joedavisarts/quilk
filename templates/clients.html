@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Clients — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Clients</h1>
+</div>
+
+{% if clients %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Email</th>
+      <th>Phone</th>
+      <th>City</th>
+      <th>Docs</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in clients %}
+    <tr class="clickable" data-href="{{ url_for('client_detail', client_id=c.id) }}">
+      <td class="strong">{{ c.name }}</td>
+      <td>{{ c.email or '—' }}</td>
+      <td>{{ c.phone or '—' }}</td>
+      <td>{{ c.city or '—' }}</td>
+      <td>{{ c.doc_count }}</td>
+      <td><a href="{{ url_for('client_detail', client_id=c.id) }}" class="btn btn-xs btn-outline">View</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No clients yet. Create one when you make your first document.</p>
+{% endif %}
+{% endblock %}

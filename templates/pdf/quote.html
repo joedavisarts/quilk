@@ -1,0 +1,86 @@
+{% include 'base_pdf.html' %}
+<div class="page">
+
+  <div class="doc-header">
+    <div class="logo-block">
+      {% if logo_b64 %}
+        <img src="{{ logo_b64 }}" alt="Joe Davis Arts & Media" />
+        <img src="LogoType_Gold.png" alt="Joe Davis Arts & Media" style="height: 22pt; width: auto; margin-top: 4pt;" />
+      {% else %}
+        <img src="LogoType_Gold.png" alt="Joe Davis Arts & Media" style="height: 22pt; width: auto;" />
+      {% endif %}
+    </div>
+    <div class="header-right">
+      <div class="doc-type-label">Quote</div>
+      <div class="doc-number">{{ doc.doc_number }}</div>
+      <div>16 Liguanea Way</div>
+      <div>Liguanea, Kingston</div>
+      <div>Jamaica, W.I.</div>
+    </div>
+  </div>
+
+  <hr class="gold-rule" />
+
+  <div class="bill-to-section">
+    <div class="bill-to">
+      <h3>Prepared For</h3>
+      <p><strong>{{ client.name or '' }}</strong></p>
+      {% if client.email %}<p>{{ client.email }}</p>{% endif %}
+      {% if client.phone %}<p>{{ client.phone }}</p>{% endif %}
+      {% if client.address_line1 %}<p>{{ client.address_line1 }}</p>{% endif %}
+      {% if client.address_line2 %}<p>{{ client.address_line2 }}</p>{% endif %}
+      {% if client.city or client.country %}
+        <p>{% if client.city %}{{ client.city }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %}</p>
+      {% endif %}
+    </div>
+    <div class="doc-meta">
+      <div><strong>Date:</strong> {{ doc.date_issued }}</div>
+      <div><strong>Currency:</strong> {{ doc.currency }}</div>
+    </div>
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th class="desc-col">Description</th>
+        <th class="qty-col">Qty</th>
+        <th class="price-col">Unit Price</th>
+        <th class="total-col">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in doc.line_items %}
+      <tr>
+        <td class="desc-col">{{ item.description }}</td>
+        <td class="qty-col">{{ item.qty }}</td>
+        <td class="price-col">{{ item.unit_price | format_currency }}</td>
+        <td class="total-col">{{ (item.qty * item.unit_price) | format_currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-block">
+    <div class="totals-inner">
+      <div class="t-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
+      <div class="t-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
+      <div class="t-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
+      <div class="t-row t-due"><span>Total</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+    </div>
+  </div>
+
+  {% if doc.notes %}
+  <p style="font-size:8.5pt;color:#555;margin-bottom:16pt;"><em>{{ doc.notes }}</em></p>
+  {% endif %}
+
+  <div class="doc-footer">
+    <div>
+      <div>+1 (876) 897-2446 · bookings@joedavisarts.com</div>
+      <div class="quote-valid" style="margin-top:4pt;">This quote is valid for 2 weeks from the date listed above.</div>
+    </div>
+    <div class="thank-you">Thank you for considering Joe Davis Arts &amp; Media.</div>
+  </div>
+
+</div>
+</body>
+</html>

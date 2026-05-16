@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ client.name }} — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Edit Client</h1>
+</div>
+
+<form method="POST" action="{{ url_for('client_edit', client_id=client.id) }}">
+  <div class="form-card" style="max-width:640px">
+    <h2 class="card-title">Client Info</h2>
+    <div class="field">
+      <label>Name *</label>
+      <input type="text" name="name" value="{{ client.name }}" required />
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ client.email or '' }}" />
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="text" name="phone" value="{{ client.phone or '' }}" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Address Line 1</label>
+      <input type="text" name="address_line1" value="{{ client.address_line1 or '' }}" />
+    </div>
+    <div class="field">
+      <label>Address Line 2</label>
+      <input type="text" name="address_line2" value="{{ client.address_line2 or '' }}" />
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>City</label>
+        <input type="text" name="city" value="{{ client.city or '' }}" />
+      </div>
+      <div class="field">
+        <label>Country</label>
+        <input type="text" name="country" value="{{ client.country or '' }}" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea name="notes" rows="3">{{ client.notes or '' }}</textarea>
+    </div>
+  </div>
+  <div class="form-actions">
+    <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">Cancel</a>
+    <button type="submit" class="btn btn-gold">Save Changes</button>
+  </div>
+</form>
+{% endblock %}

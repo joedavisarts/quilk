@@ -1,0 +1,54 @@
+{
+  "name": "ledger-jdam",
+  "version": "1.0.0",
+  "description": "Joe Davis Arts & Media — Document Generator",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.joedavisarts.ledger",
+    "productName": "Ledger",
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "static/assets/icon.icns"
+    },
+    "files": [
+      "**/*",
+      "!venv/**",
+      "!*.pyc",
+      "!__pycache__"
+    ],
+    "extraResources": [
+      {
+        "from": "venv",
+        "to": "venv"
+      }
+    ],
+    "dmg": {
+      "background": "static/assets/dmg-background.png",
+      "window": {
+        "width": 660,
+        "height": 400
+      },
+      "contents": [
+        {
+          "x": 165,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 495,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}

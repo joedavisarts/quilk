@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.doc_number }} — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ doc.doc_number }}</h1>
+    <span class="page-sub">
+      <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>
+      &nbsp;
+      <form method="POST" action="{{ url_for('set_status', doc_id=doc.id) }}" style="display:inline">
+        <select name="status" class="status-select status-{{ doc.status }}" onchange="this.form.submit()">
+          <option value="draft" {% if doc.status == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="pending" {% if doc.status == 'pending' %}selected{% endif %}>Pending</option>
+          <option value="sent" {% if doc.status == 'sent' %}selected{% endif %}>Sent</option>
+          <option value="paid" {% if doc.status == 'paid' %}selected{% endif %}>Paid</option>
+          <option value="overdue" {% if doc.status == 'overdue' %}selected{% endif %}>Overdue</option>
+        </select>
+      </form>
+    </span>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('edit_document', doc_id=doc.id) }}" class="btn btn-outline">Edit</a>
+    <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-outline">Preview PDF</a>
+    <a href="{{ url_for('document_pdf', doc_id=doc.id) }}?download=1" class="btn btn-outline">Download PDF</a>
+    <a href="{{ url_for('send_document', doc_id=doc.id) }}" class="btn btn-outline">Send to Client</a>
+    <form method="POST" action="{{ url_for('delete_document', doc_id=doc.id) }}" style="display:inline" onsubmit="return confirm('Delete this document? This cannot be undone.')">
+      <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="detail-grid">
+  <div class="form-card">
+    <h2 class="card-title">Document Info</h2>
+    <dl class="detail-list">
+      <dt>Date Issued</dt><dd>{{ doc.date_issued }}</dd>
+      <dt>Currency</dt><dd>{{ doc.currency }}</dd>
+      {% if doc.pay_by_date %}
+      <dt>Pay By</dt><dd>{{ doc.pay_by_date }}</dd>
+      {% endif %}
+      {% if doc.notes %}
+      <dt>Notes</dt><dd>{{ doc.notes }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+  {% if client %}
+  <div class="form-card">
+    <h2 class="card-title">Client</h2>
+    <dl class="detail-list">
+      <dt>Name</dt><dd><a href="{{ url_for('client_detail', client_id=client.id) }}">{{ client.name }}</a></dd>
+      {% if client.email %}<dt>Email</dt><dd>{{ client.email }}</dd>{% endif %}
+      {% if client.phone %}<dt>Phone</dt><dd>{{ client.phone }}</dd>{% endif %}
+    </dl>
+  </div>
+  {% endif %}
+</div>
+
+<div class="form-card full-width">
+  <h2 class="card-title">Line Items</h2>
+  <table class="data-table">
+    <thead>
+      <tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+    </thead>
+    <tbody>
+      {% for item in doc.line_items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td>{{ item.qty }}</td>
+        <td>{{ item.unit_price | format_currency }}</td>
+        <td>{{ (item.qty * item.unit_price) | format_currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-summary">
+    <div class="total-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
+    <div class="total-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
+    <div class="total-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
+    <div class="total-row"><span>Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
+    <div class="total-row total-due"><span>Amount Due</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+  </div>
+</div>
+
+{% if sent_logs %}
+<div class="form-card full-width">
+  <h2 class="card-title">Email History</h2>
+  {% for log in sent_logs %}
+  <div class="sent-log-item">
+    <span class="sent-log-status-{{ log.status }}">{{ log.status | upper }}</span>
+    <span>{{ log.recipient_email }}</span>
+    <span style="flex:1;color:var(--text-dim);font-size:11.5px;">{{ log.subject }}</span>
+    <span style="color:var(--text-dim);font-size:11.5px;">{{ log.sent_at }}</span>
+    {% if log.error_message %}
+    <span style="color:#e07070;font-size:11px;">{{ log.error_message }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const sel = document.querySelector('.status-select');
+if (sel) {
+  sel.addEventListener('change', () => {
+    sel.className = 'status-select status-' + sel.value;
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Documents — Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Documents</h1>
+  <div class="header-actions">
+    <button id="bulk-delete-btn" class="btn btn-danger hidden" type="button" onclick="bulkDelete()">Delete Selected</button>
+    <a href="{{ url_for('export_csv') }}" class="btn btn-outline">Export CSV</a>
+  </div>
+</div>
+
+<form method="GET" class="filter-bar">
+  <select name="type" onchange="this.form.submit()">
+    <option value="" {% if not filter_type %}selected{% endif %}>All Types</option>
+    <option value="invoice" {% if filter_type=='invoice' %}selected{% endif %}>Invoice</option>
+    <option value="quote" {% if filter_type=='quote' %}selected{% endif %}>Quote</option>
+    <option value="receipt" {% if filter_type=='receipt' %}selected{% endif %}>Receipt</option>
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="" {% if not filter_status %}selected{% endif %}>All Statuses</option>
+    <option value="draft" {% if filter_status=='draft' %}selected{% endif %}>Draft</option>
+    <option value="pending" {% if filter_status=='pending' %}selected{% endif %}>Pending</option>
+    <option value="sent" {% if filter_status=='sent' %}selected{% endif %}>Sent</option>
+    <option value="paid" {% if filter_status=='paid' %}selected{% endif %}>Paid</option>
+    <option value="overdue" {% if filter_status=='overdue' %}selected{% endif %}>Overdue</option>
+  </select>
+</form>
+
+{% if documents %}
+<form id="bulk-form" method="POST" action="{{ url_for('bulk_delete_documents') }}">
+<table class="data-table">
+  <thead>
+    <tr>
+      <th style="width:36px;"><input type="checkbox" id="select-all" title="Select all" style="accent-color:var(--gold);cursor:pointer;"></th>
+      <th>Number</th>
+      <th>Type</th>
+      <th>Client</th>
+      <th>Date</th>
+      <th>Currency</th>
+      <th>Amount Due</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for doc in documents %}
+    <tr class="clickable" data-href="{{ url_for('document_view', doc_id=doc.id) }}">
+      <td onclick="event.stopPropagation()"><input type="checkbox" name="doc_ids" value="{{ doc.id }}" class="doc-checkbox" style="accent-color:var(--gold);cursor:pointer;"></td>
+      <td class="doc-number">{{ doc.doc_number }}</td>
+      <td><span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span></td>
+      <td>{{ doc.client_name or '—' }}</td>
+      <td>{{ doc.date_issued }}</td>
+      <td>{{ doc.currency }}</td>
+      <td>{{ doc.amount_due | format_currency }}</td>
+      <td><span class="status status-{{ doc.status }} status-{{ doc.doc_type }}-{{ doc.status }}">{{ doc.status }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</form>
+{% else %}
+<p class="empty-state">No documents match the current filters.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const selectAll = document.getElementById('select-all');
+const bulkBtn = document.getElementById('bulk-delete-btn');
+const checkboxes = () => document.querySelectorAll('.doc-checkbox');
+
+function updateBulkBtn() {
+  const anyChecked = [...checkboxes()].some(c => c.checked);
+  bulkBtn.classList.toggle('hidden', !anyChecked);
+  if (selectAll) selectAll.indeterminate = anyChecked && [...checkboxes()].some(c => !c.checked);
+}
+
+if (selectAll) {
+  selectAll.addEventListener('change', () => {
+    checkboxes().forEach(c => c.checked = selectAll.checked);
+    updateBulkBtn();
+  });
+}
+
+checkboxes().forEach(c => c.addEventListener('change', () => {
+  if (selectAll) selectAll.checked = [...checkboxes()].every(c => c.checked);
+  updateBulkBtn();
+}));
+
+function bulkDelete() {
+  const count = [...checkboxes()].filter(c => c.checked).length;
+  if (confirm(`Delete ${count} document${count !== 1 ? 's' : ''}? This cannot be undone.`)) {
+    document.getElementById('bulk-form').submit();
+  }
+}
+</script>
+{% endblock %}
