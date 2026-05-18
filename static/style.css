@@ -1091,12 +1091,19 @@ body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; 
     min-height: calc(100vh / 1.15);
   }
 
-  /* Main content: vertical scroll only, but don't clip horizontal */
+  /* Main content: scale down to 75% so the full form fits on screen.
+     transform-origin: top left keeps it anchored to the sidebar edge.
+     The 1/0.75 compensation on width prevents the scaled element from
+     leaving a gap on the right (scale shrinks visual size but not
+     layout size, so we counteract that with width). */
   .main-content {
     overflow-y: auto;
     overflow-x: visible;
     padding: 20px 16px;
     min-width: 0;
+    transform: scale(0.75);
+    transform-origin: top left;
+    width: calc(100% / 0.75);
   }
 
   /* Form cards must not be capped at the visible viewport width —
