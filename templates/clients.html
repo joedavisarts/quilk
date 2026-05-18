@@ -16,7 +16,7 @@
       <th style="width:36px;"><input type="checkbox" id="select-all" title="Select all" style="accent-color:var(--gold);cursor:pointer;"></th>
       <th>Name</th>
       <th>Email</th>
-      <th>Phone</th>
+      <th style="min-width:160px;">Phone</th>
       <th>City</th>
       <th>Docs</th>
       <th></th>
@@ -28,7 +28,7 @@
       <td onclick="event.stopPropagation()"><input type="checkbox" name="client_ids" value="{{ c.id }}" class="client-checkbox" style="accent-color:var(--gold);cursor:pointer;"></td>
       <td class="strong">{{ c.name }}</td>
       <td>{{ c.email or '—' }}</td>
-      <td>{{ c.phone or '—' }}</td>
+      <td style="white-space:nowrap;">{{ c.phone or '—' }}</td>
       <td>{{ c.city or '—' }}</td>
       <td>{{ c.doc_count }}</td>
       <td><a href="{{ url_for('client_detail', client_id=c.id) }}" class="btn btn-xs btn-outline" onclick="event.stopPropagation()">View</a></td>
