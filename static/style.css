@@ -1139,3 +1139,10 @@ body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; 
     margin-left: 0;
   }
 }
+
+/* ===== MOBILE STACK FIELD ROWS ===== */
+@media (max-width: 767px) {
+  .field-row.field-row-stack-mobile {
+    grid-template-columns: 1fr;
+  }
+}
