@@ -1098,7 +1098,7 @@ body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; 
     overflow-x: visible;
     padding: 20px 16px;
     min-width: 0;
-    zoom: 0.65;
+    zoom: 0.60;
     font-size: 18px;
   }
 
