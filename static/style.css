@@ -1081,3 +1081,58 @@ body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; 
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== MOBILE OVERFLOW FIX ===== */
+@media (max-width: 767px) {
+  /* Allow the shell to scroll horizontally; remove fixed height clipping */
+  .app-shell {
+    overflow: visible;
+    height: auto;
+    min-height: calc(100vh / 1.15);
+  }
+
+  /* Main content: vertical scroll only, but don't clip horizontal */
+  .main-content {
+    overflow-y: auto;
+    overflow-x: visible;
+    padding: 20px 16px;
+    min-width: 0;
+  }
+
+  /* Form cards must not be capped at the visible viewport width —
+     give them a fixed minimum so their contents don't overflow them */
+  .form-card {
+    min-width: 480px;
+  }
+
+  /* Wrap the form cards in a horizontally-scrollable container.
+     The body itself becomes the horizontal scroller. */
+  body {
+    overflow-x: auto;
+  }
+
+  /* form-grid (2-col) stays 2-col but collapses gracefully */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* field-row (2-col) stays 2-col inside the wider card */
+  .field-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Line items table: let it be as wide as it needs */
+  .line-items-table {
+    min-width: 440px;
+  }
+
+  /* Totals grid: stack vertically on mobile */
+  .totals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .totals-summary {
+    max-width: 100%;
+    margin-left: 0;
+  }
+}
