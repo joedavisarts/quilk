@@ -33,6 +33,7 @@
     <tr>
       <th style="width:36px;"><input type="checkbox" id="select-all" title="Select all" style="accent-color:var(--gold);cursor:pointer;"></th>
       <th>Open</th>
+      <th>Save</th>
       <th>Number</th>
       <th>Type</th>
       <th>Client</th>
@@ -47,6 +48,7 @@
     <tr class="clickable" data-href="{{ url_for('document_view', doc_id=doc.id) }}">
       <td onclick="event.stopPropagation()"><input type="checkbox" name="doc_ids" value="{{ doc.id }}" class="doc-checkbox" style="accent-color:var(--gold);cursor:pointer;"></td>
       <td onclick="event.stopPropagation()"><a href="{{ url_for('document_view', doc_id=doc.id) }}" class="btn btn-xs btn-outline">View</a></td>
+      <td onclick="event.stopPropagation()"><a href="{{ url_for('document_pdf', doc_id=doc.id) }}?download=1" class="btn btn-xs btn-outline">PDF</a></td>
       <td class="doc-number">{{ doc.doc_number }}</td>
       <td><span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span></td>
       <td>{{ doc.client_name or '—' }}</td>

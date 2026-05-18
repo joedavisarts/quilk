@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-header">
   <div>
+    <a href="{{ url_for('documents') }}" class="btn btn-xs btn-outline" style="margin-bottom:10px;">← Back</a>
     <h1>{{ doc.doc_number }}</h1>
     <span class="page-sub">
       <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>

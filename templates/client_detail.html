@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-header">
   <div>
+    <a href="{{ url_for('clients') }}" class="btn btn-xs btn-outline" style="margin-bottom:10px;">← Back</a>
     <h1>{{ client.name }}</h1>
     {% if client.city %}<span class="page-sub">{{ client.city }}{% if client.country %}, {{ client.country }}{% endif %}</span>{% endif %}
   </div>
