@@ -137,8 +137,18 @@
       </div>
     </div>
 
-    <!-- Step 3: result -->
+    <!-- Step 3: merge duplicates -->
     <div id="import-step-3" class="hidden" style="padding:24px 28px 20px;flex:1;overflow-y:auto;">
+      <p id="import-merge-header" style="margin-bottom:16px;color:#888;font-size:13.5px;"></p>
+      <div id="import-merge-container"></div>
+      <div class="form-actions" style="margin-top:16px;">
+        <button type="button" class="btn btn-outline" onclick="showImportStep(2)">← Back</button>
+        <button type="button" class="btn btn-gold" id="import-confirm-btn" onclick="confirmMerge()">Import</button>
+      </div>
+    </div>
+
+    <!-- Step 4: result -->
+    <div id="import-step-4" class="hidden" style="padding:24px 28px 20px;flex:1;overflow-y:auto;">
       <div id="import-result-content"></div>
       <div class="form-actions" style="margin-top:16px;">
         <button type="button" class="btn btn-gold" onclick="closeImportModal(); window.location.reload();">Done</button>
@@ -224,6 +234,10 @@ const IMPORT_FIELDS = [
 let _importCSVText = '';
 let _importHeaders = [];
 let _importRows = [];
+let _importNormalRows = [];
+let _importDuplicateGroups = [];
+let _mergeDecisions = [];
+let _importMergeCount = 0;
 
 function openImportModal() {
   document.getElementById('import-csv-modal').classList.remove('hidden');
@@ -233,9 +247,9 @@ function openImportModal() {
 function closeImportModal() {
   document.getElementById('import-csv-modal').classList.add('hidden');
   document.getElementById('import-file-input').value = '';
-  _importCSVText = '';
-  _importHeaders = [];
-  _importRows = [];
+  _importCSVText = ''; _importHeaders = []; _importRows = [];
+  _importNormalRows = []; _importDuplicateGroups = [];
+  _mergeDecisions = []; _importMergeCount = 0;
 }
 
 document.getElementById('import-csv-modal').addEventListener('click', function(e) {
@@ -247,12 +261,13 @@ document.getElementById('import-file-input').addEventListener('change', function
 });
 
 function showImportStep(n) {
-  [1,2,3].forEach(i =>
+  [1,2,3,4].forEach(i =>
     document.getElementById('import-step-' + i).classList.toggle('hidden', i !== n)
   );
   document.getElementById('import-modal-title').textContent =
     n === 1 ? 'Import Clients from CSV' :
-    n === 2 ? 'Map Columns' : 'Import Complete';
+    n === 2 ? 'Map Columns' :
+    n === 3 ? 'Resolve Duplicates' : 'Import Complete';
 }
 
 function _parseCSV(text) {
@@ -283,9 +298,7 @@ function _parseCSV(text) {
   return rows;
 }
 
-function _normalizeKey(s) {
-  return s.toLowerCase().replace(/[\s_\-\.]+/g, '');
-}
+function _normalizeKey(s) { return s.toLowerCase().replace(/[\s_\-\.]+/g, ''); }
 
 function _autoMatch(headers) {
   const aliases = {
@@ -332,14 +345,11 @@ function _buildMappingUI() {
   wrap.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;';
   IMPORT_FIELDS.forEach(f => {
     const div = document.createElement('div');
-    div.className = 'field';
-    div.style.marginBottom = '0';
+    div.className = 'field'; div.style.marginBottom = '0';
     const label = document.createElement('label');
-    label.style.fontSize = '12px';
-    label.textContent = f.label;
+    label.style.fontSize = '12px'; label.textContent = f.label;
     const sel = document.createElement('select');
-    sel.id = 'map-' + f.key;
-    sel.style.fontSize = '13px';
+    sel.id = 'map-' + f.key; sel.style.fontSize = '13px';
     const none = document.createElement('option');
     none.value = ''; none.textContent = '— skip / none —';
     sel.appendChild(none);
@@ -383,39 +393,230 @@ function _updatePreview() {
   table.innerHTML = html;
 }
 
+// ---- Duplicate detection ----
+
+function _detectDuplicates(rows) {
+  const groupMap = new Map();
+  rows.forEach((row, i) => {
+    const key = (row.company_name || '').toLowerCase() + '|||' + (row.name || '').toLowerCase();
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(i);
+  });
+  const duplicateGroups = [], normalRows = [];
+  groupMap.forEach(indices => {
+    if (indices.length > 1) duplicateGroups.push(indices.map(i => rows[i]));
+    else normalRows.push(rows[indices[0]]);
+  });
+  return { duplicateGroups, normalRows };
+}
+
+function _getConflicts(group) {
+  const conflicts = {};
+  IMPORT_FIELDS.forEach(f => {
+    const seen = new Set();
+    const unique = group
+      .map(row => (row[f.key] || '').trim())
+      .filter(v => v)
+      .filter(v => { const lc = v.toLowerCase(); if (seen.has(lc)) return false; seen.add(lc); return true; });
+    if (unique.length > 1) conflicts[f.key] = unique;
+  });
+  return conflicts;
+}
+
+function _autoResolve(group) {
+  const resolved = {};
+  IMPORT_FIELDS.forEach(f => {
+    const vals = group.map(row => (row[f.key] || '').trim()).filter(v => v);
+    resolved[f.key] = vals.length ? vals[0] : '';
+  });
+  return resolved;
+}
+
+// ---- Merge UI ----
+
+function _buildMergeUI(groups) {
+  _importDuplicateGroups = groups;
+  _mergeDecisions = groups.map(g => ({ action: 'merge', resolved: _autoResolve(g) }));
+  const s = groups.length !== 1 ? 's' : '';
+  document.getElementById('import-merge-header').innerHTML =
+    `Found <strong>${groups.length}</strong> duplicate group${s} within this CSV (same company + contact name). Choose how to handle each.`;
+  const container = document.getElementById('import-merge-container');
+  container.innerHTML = '';
+  groups.forEach((group, gi) => container.appendChild(_buildGroupCard(group, gi)));
+}
+
+function _buildGroupCard(group, gi) {
+  const groupLabel = group[0].company_name || group[0].name || 'Unknown';
+  const conflicts = _getConflicts(group);
+  const card = document.createElement('div');
+  card.style.cssText = 'border:1px solid var(--border);border-radius:6px;padding:16px 18px;margin-bottom:14px;';
+
+  // Title
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:14px;font-weight:600;margin-bottom:12px;';
+  title.innerHTML = `${groupLabel} <span style="font-weight:400;color:#888;">(${group.length} matching rows)</span>`;
+  card.appendChild(title);
+
+  // Action toggle
+  const toggle = document.createElement('div');
+  toggle.style.cssText = 'display:flex;gap:20px;margin-bottom:14px;';
+  ['merge', 'keep'].forEach((val, ti) => {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;';
+    const radio = document.createElement('input');
+    radio.type = 'radio'; radio.name = `mg-action-${gi}`; radio.value = val;
+    radio.style.cssText = 'accent-color:var(--gold);';
+    if (ti === 0) radio.checked = true;
+    radio.addEventListener('change', () => _onMergeAction(gi, val));
+    lbl.append(radio, document.createTextNode(
+      val === 'merge' ? 'Merge into one client' : `Keep ${group.length} separate`
+    ));
+    toggle.appendChild(lbl);
+  });
+  card.appendChild(toggle);
+
+  // Details (auto-combined + conflicts)
+  const detailsDiv = document.createElement('div');
+  detailsDiv.id = `mg-details-${gi}`;
+
+  const nonConflict = IMPORT_FIELDS.filter(f => !conflicts[f.key] && _mergeDecisions[gi].resolved[f.key]);
+  const conflictFields = IMPORT_FIELDS.filter(f => conflicts[f.key]);
+
+  if (nonConflict.length) {
+    const sec = document.createElement('div');
+    sec.style.marginBottom = conflictFields.length ? '14px' : '0';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.05em;margin-bottom:6px;';
+    hdr.textContent = 'Auto-combined';
+    sec.appendChild(hdr);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:130px 1fr;gap:3px 10px;font-size:13px;';
+    nonConflict.forEach(f => {
+      const k = document.createElement('span'); k.style.color = '#888'; k.textContent = f.label;
+      const v = document.createElement('span'); v.textContent = _mergeDecisions[gi].resolved[f.key];
+      grid.append(k, v);
+    });
+    sec.appendChild(grid);
+    detailsDiv.appendChild(sec);
+  }
+
+  if (conflictFields.length) {
+    const confHdr = document.createElement('div');
+    confHdr.style.cssText = 'font-size:11px;text-transform:uppercase;color:#c8860a;letter-spacing:.05em;margin-bottom:10px;';
+    confHdr.textContent = '⚠ Conflicts — pick one value per field';
+    detailsDiv.appendChild(confHdr);
+    conflictFields.forEach(f => {
+      const fieldDiv = document.createElement('div');
+      fieldDiv.style.marginBottom = '10px';
+      const fieldLbl = document.createElement('div');
+      fieldLbl.style.cssText = 'font-size:12px;color:#888;margin-bottom:4px;';
+      fieldLbl.textContent = f.label;
+      fieldDiv.appendChild(fieldLbl);
+      const radioGroup = document.createElement('div');
+      radioGroup.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+      conflicts[f.key].forEach((val, vi) => {
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;';
+        const radio = document.createElement('input');
+        radio.type = 'radio'; radio.name = `mg-${gi}-${f.key}`; radio.value = val;
+        radio.style.cssText = 'accent-color:var(--gold);flex-shrink:0;';
+        if (vi === 0) { radio.checked = true; }
+        radio.addEventListener('change', () => { _mergeDecisions[gi].resolved[f.key] = val; });
+        lbl.append(radio, document.createTextNode(val));
+        radioGroup.appendChild(lbl);
+      });
+      fieldDiv.appendChild(radioGroup);
+      detailsDiv.appendChild(fieldDiv);
+    });
+  }
+
+  card.appendChild(detailsDiv);
+  return card;
+}
+
+function _onMergeAction(gi, action) {
+  _mergeDecisions[gi].action = action;
+  const d = document.getElementById(`mg-details-${gi}`);
+  if (d) d.style.opacity = action === 'merge' ? '1' : '0.35';
+}
+
+// ---- Final import ----
+
 function runImport() {
   const mapping = _getMapping();
   const errEl = document.getElementById('import-map-error');
-  if (!mapping.company_name && !mapping.name) {
-    errEl.style.display = 'block'; return;
-  }
+  if (!mapping.company_name && !mapping.name) { errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
-  const btn = document.getElementById('import-run-btn');
-  btn.disabled = true; btn.textContent = 'Importing…';
+
+  const mappedRows = _importRows
+    .map(rawRow => {
+      const row = {};
+      IMPORT_FIELDS.forEach(f => {
+        const idx = _importHeaders.indexOf(mapping[f.key]);
+        row[f.key] = (idx >= 0 ? (rawRow[idx] || '') : '').trim();
+      });
+      return row;
+    })
+    .filter(row => row.company_name || row.name);
+
+  const { duplicateGroups, normalRows } = _detectDuplicates(mappedRows);
+  _importNormalRows = normalRows;
+  _importMergeCount = 0;
+
+  if (duplicateGroups.length === 0) {
+    _doImport(mappedRows);
+  } else {
+    _buildMergeUI(duplicateGroups);
+    showImportStep(3);
+  }
+}
+
+function confirmMerge() {
+  const finalRows = [..._importNormalRows];
+  let mergeCount = 0;
+  _importDuplicateGroups.forEach((group, gi) => {
+    if (_mergeDecisions[gi].action === 'merge') {
+      finalRows.push({ ..._mergeDecisions[gi].resolved });
+      mergeCount++;
+    } else {
+      finalRows.push(...group);
+    }
+  });
+  _importMergeCount = mergeCount;
+  _doImport(finalRows);
+}
+
+function _doImport(rows) {
+  const btn = document.getElementById('import-confirm-btn');
+  const runBtn = document.getElementById('import-run-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+  if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Checking…'; }
+
   const body = new FormData();
-  body.append('csv_content', _importCSVText);
-  body.append('mapping', JSON.stringify(mapping));
+  body.append('rows_json', JSON.stringify(rows));
+
   fetch('/clients/import', { method: 'POST', body })
     .then(r => r.json())
     .then(data => {
-      let html = '';
+      if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+      if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Import Clients'; }
       if (data.error) {
-        html = '<p style="color:#e05;">Error: ' + data.error + '</p>';
+        document.getElementById('import-result-content').innerHTML =
+          '<p style="color:#e05;">Error: ' + data.error + '</p>';
       } else {
-        html = '<p style="font-size:22px;margin-bottom:12px;"><strong>' + data.imported +
-               '</strong> client' + (data.imported !== 1 ? 's' : '') + ' imported.</p>';
-        if (data.skipped) {
-          html += '<p style="color:#888;">' + data.skipped + ' row' +
-                  (data.skipped !== 1 ? 's' : '') +
-                  ' skipped — no company name or contact name.</p>';
-        }
+        let html = '<p style="font-size:22px;margin-bottom:12px;"><strong>' + data.imported +
+                   '</strong> client' + (data.imported !== 1 ? 's' : '') + ' imported.</p>';
+        if (_importMergeCount) html += '<p style="color:#888;">' + _importMergeCount +
+          ' duplicate group' + (_importMergeCount !== 1 ? 's' : '') + ' merged.</p>';
+        if (data.skipped) html += '<p style="color:#888;">' + data.skipped + ' row' +
+          (data.skipped !== 1 ? 's' : '') + ' skipped (no name or company).</p>';
+        document.getElementById('import-result-content').innerHTML = html;
       }
-      document.getElementById('import-result-content').innerHTML = html;
-      btn.disabled = false; btn.textContent = 'Import Clients';
-      showImportStep(3);
+      showImportStep(4);
     })
     .catch(() => {
-      btn.disabled = false; btn.textContent = 'Import Clients';
+      if (btn) { btn.disabled = false; btn.textContent = 'Import'; }
+      if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Import Clients'; }
       alert('Import failed. Please try again.');
     });
 }

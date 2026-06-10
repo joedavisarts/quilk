@@ -3,6 +3,7 @@ import json
 import csv
 import io
 import os
+from collections import defaultdict
 from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -154,6 +155,45 @@ def _upsert_item_library(db, description, unit_price, currency, user_id):
              currency=excluded.currency""",
         (desc, desc, unit_price, currency, user_id),
     )
+
+
+def _client_display_labels(db, user_id):
+    """Return {client_id: display_label} with disambiguation for colliding base labels."""
+    rows = _rows_to_list(db.execute(
+        "SELECT id, company_name, name, email, phone, address_line1"
+        " FROM clients WHERE user_id=?", (user_id,)
+    ).fetchall())
+    for r in rows:
+        r['_base'] = ((r.get('company_name') or '').strip() or
+                       (r.get('name') or '').strip() or '')
+    groups = defaultdict(list)
+    for r in rows:
+        groups[r['_base'].lower()].append(r)
+    result = {}
+    for _, group in groups.items():
+        if len(group) == 1:
+            result[group[0]['id']] = group[0]['_base']
+        else:
+            for c in group:
+                base = c['_base']
+                contact = (c.get('name') or '').strip()
+                if contact:
+                    all_same = all(
+                        (g.get('name') or '').strip().lower() == contact.lower()
+                        for g in group
+                    )
+                    if not all_same:
+                        result[c['id']] = f"{base} ({contact})"
+                        continue
+                for field in ('email', 'phone', 'address_line1'):
+                    val = (c.get(field) or '').strip()
+                    field_vals = {(g.get(field) or '').strip().lower() for g in group}
+                    if len(field_vals) > 1 and val:
+                        result[c['id']] = f"{base} ({val})"
+                        break
+                else:
+                    result[c['id']] = f"{base} (#{c['id']})"
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +541,10 @@ def dashboard():
             (current_user.id,),
         ).fetchall()
     )
+    labels = _client_display_labels(db, current_user.id)
+    for row in recent:
+        if row.get('client_id'):
+            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
     counts = {}
     for dt in ('invoice', 'quote', 'receipt'):
         row = db.execute(
@@ -607,6 +651,9 @@ def new_document(doc_type):
             (current_user.id,),
         ).fetchall()
     )
+    labels = _client_display_labels(db, current_user.id)
+    for c in clients:
+        c['display_name'] = labels.get(c['id'], c['display_name'])
     db.close()
     today = date.today().isoformat()
     return render_template('new_document.html', doc_type=doc_type,
@@ -682,8 +729,11 @@ def search_documents():
             (current_user.id,),
         ).fetchall())
 
+    labels = _client_display_labels(db, current_user.id)
     for row in rows:
         row['line_items'] = _parse_line_items(row['line_items'])
+        if row.get('client_id'):
+            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
 
     db.close()
     return jsonify(rows)
@@ -726,45 +776,42 @@ def clients():
             (current_user.id,),
         ).fetchall()
     )
+    labels = _client_display_labels(db, current_user.id)
+    for r in rows:
+        r['display_name'] = labels.get(r['id'], r['display_name'])
     db.close()
     return render_template('clients.html', clients=rows)
 
 
 @app.route('/clients/import', methods=['POST'])
 def import_clients():
-    csv_content = request.form.get('csv_content', '').strip()
-    if not csv_content:
-        return jsonify({'error': 'No CSV content received'}), 400
     try:
-        mapping = json.loads(request.form.get('mapping', '{}'))
+        rows = json.loads(request.form.get('rows_json', '[]'))
     except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid mapping JSON'}), 400
-
-    quilk_fields = ['company_name', 'name', 'email', 'phone',
-                    'address_line1', 'address_line2', 'city', 'country', 'notes']
-
-    reader = csv.DictReader(io.StringIO(csv_content))
+        return jsonify({'error': 'Invalid JSON'}), 400
+    if not isinstance(rows, list):
+        return jsonify({'error': 'rows_json must be a list'}), 400
     imported = 0
     skipped = 0
     db = get_db()
     try:
-        for row in reader:
-            if not any((v or '').strip() for v in row.values()):
-                continue
-            record = {}
-            for field in quilk_fields:
-                col = mapping.get(field, '')
-                record[field] = (row.get(col) or '').strip() or None
-            if not record['company_name'] and not record['name']:
+        for row in rows:
+            company = (row.get('company_name') or '').strip() or None
+            name = (row.get('name') or '').strip() or None
+            if not company and not name:
                 skipped += 1
                 continue
             db.execute(
                 "INSERT INTO clients (company_name,name,email,phone,address_line1,"
                 "address_line2,city,country,notes,user_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (record['company_name'], record['name'] or '',
-                 record['email'], record['phone'],
-                 record['address_line1'], record['address_line2'],
-                 record['city'], record['country'], record['notes'],
+                (company, name or '',
+                 (row.get('email') or '').strip() or None,
+                 (row.get('phone') or '').strip() or None,
+                 (row.get('address_line1') or '').strip() or None,
+                 (row.get('address_line2') or '').strip() or None,
+                 (row.get('city') or '').strip() or None,
+                 (row.get('country') or '').strip() or None,
+                 (row.get('notes') or '').strip() or None,
                  current_user.id),
             )
             imported += 1
@@ -921,6 +968,10 @@ def documents():
         params.append(status)
     query += " ORDER BY d.created_at DESC"
     rows = _rows_to_list(db.execute(query, params).fetchall())
+    labels = _client_display_labels(db, current_user.id)
+    for row in rows:
+        if row.get('client_id'):
+            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
     db.close()
     return render_template('documents.html', documents=rows,
                            filter_type=doc_type, filter_status=status)
@@ -1153,6 +1204,9 @@ def edit_document(doc_id):
             (current_user.id,),
         ).fetchall()
     )
+    labels = _client_display_labels(db, current_user.id)
+    for c in clients:
+        c['display_name'] = labels.get(c['id'], c['display_name'])
     db.close()
     return render_template('edit_document.html', doc=doc, clients=clients)
 
