@@ -1,9 +1,9 @@
 {
-  "name": "Ledger",
-  "short_name": "Ledger",
+  "name": "Quilk",
+  "short_name": "Quilk",
   "display": "standalone",
   "background_color": "#0d0d0b",
-  "theme_color": "#7DD3FC",
+  "theme_color": "#C77DFC",
   "icons": [
     {
       "src": "/static/assets/iconsquare.png",

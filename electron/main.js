@@ -19,7 +19,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'Ledger — Joe Davis Arts & Media',
+    title: 'Quilk — Joe Davis Arts & Media',
     webPreferences: {
       nodeIntegration: false,
       preload: path.join(__dirname, 'preload.js'),

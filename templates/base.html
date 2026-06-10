@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Ledger — JDAM{% endblock %}</title>
+  <title>{% block title %}Quilk — JDAM{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,300&display=swap" rel="stylesheet" />
@@ -11,7 +11,7 @@
   <link rel="manifest" href="/static/manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Ledger">
+  <meta name="apple-mobile-web-app-title" content="Quilk">
   <link rel="apple-touch-icon" href="/static/assets/pnglogoblue.png">
   <link rel="icon" type="image/png" href="/static/assets/pnglogoblue.png">
 </head>
@@ -22,8 +22,8 @@
         <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
       </button>
       <div class="sidebar-logo">
-        <img id="sidebar-logo" src="{{ url_for('static', filename='assets/pnglogo.png') }}" alt="Ledger Logo" class="sidebar-logo-img" />
-        <span class="logo-text">LEDGER</span>
+        <img id="sidebar-logo" src="{{ url_for('static', filename='assets/pnglogo.png') }}" alt="Quilk Logo" class="sidebar-logo-img" />
+        <span class="logo-text">QUILK</span>
       </div>
       <nav class="sidebar-nav">
         <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">

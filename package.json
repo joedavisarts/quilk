@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.joedavisarts.ledger",
-    "productName": "Ledger",
+    "productName": "Quilk",
     "mac": {
       "category": "public.app-category.business",
       "icon": "static/assets/icon.icns"
