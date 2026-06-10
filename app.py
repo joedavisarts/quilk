@@ -3,6 +3,7 @@ import json
 import csv
 import io
 import os
+import re
 from collections import defaultdict
 from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
@@ -372,19 +373,22 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
 
     if body_text is not None:
         _ps = "font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 16px 0;"
+        normalized = re.sub(r'\n{3,}', '\n\n', body_text.strip())
         body_html = ''.join(
-            f'<p style="{_ps}">{p.strip()}</p>'
-            for p in body_text.split('\n\n') if p.strip()
+            f'<p style="{_ps}">{p.strip().replace(chr(10), "<br/>")}</p>'
+            for p in normalized.split('\n\n') if p.strip()
         )
+        greeting_html = ''
         _so = '\n\nWarmest Regards,\n' + user['display_name']
         if user.get('title'):
             _so += '\n' + user['title']
         _so += '\n\n' + user['business_name']
         if user.get('business_website'):
             _so += '\n' + user['business_website']
-        plain = 'Good day,\n\n' + body_text + _so
+        plain = body_text + _so
     else:
         body_html = body_paras[doc_type]
+        greeting_html = f'<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 20px 0;">Good day,</p>'
         plain = _email_body_text(first_name, doc_number, doc_type, user)
 
     if logo_path and os.path.exists(logo_path):
@@ -460,8 +464,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
       </td></tr>
       <!-- Body -->
       <tr><td style="padding:36px 40px 8px 40px;">
-        <p style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 20px 0;">Good day,</p>
-        {body_html}
+        {greeting_html}{body_html}
       </td></tr>
       <!-- Sign-off -->
       <tr><td style="padding:24px 40px 32px 40px;">
@@ -544,23 +547,26 @@ def _doc_subject(doc_type, user):
 def _default_email_templates():
     return {
         'invoice': {
-            'subject_template': 'Confidential: Invoice {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'subject_template': 'Confidential: Invoice {{###DOCNUMBER###}} - {{###YOURBUSINESSNAME###}}',
             'body_template': (
+                'Greetings,\n\n'
                 'Please find your invoice attached, document number {{###DOCNUMBER###}}, for your records.\n\n'
                 'Kindly confirm receipt of this email, and please reply directly with any questions.'
             ),
         },
         'quote': {
-            'subject_template': 'Confidential: Quote {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'subject_template': 'Confidential: Quote {{###DOCNUMBER###}} - {{###YOURBUSINESSNAME###}}',
             'body_template': (
+                'Greetings,\n\n'
                 'Please find your quote attached, document number {{###DOCNUMBER###}}, for your records. '
                 'This quote is valid for two weeks from the date of issue.\n\n'
                 'Kindly confirm receipt of this email, and please reply directly with any questions.'
             ),
         },
         'receipt': {
-            'subject_template': 'Important: Receipt {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'subject_template': 'Important: Receipt {{###DOCNUMBER###}} - {{###YOURBUSINESSNAME###}}',
             'body_template': (
+                'Greetings,\n\n'
                 'Please find your receipt attached, document number {{###DOCNUMBER###}}, for your records.\n\n'
                 'It has been a pleasure. Kindly confirm receipt of this email, and feel free to reply directly with any questions.'
             ),
@@ -578,11 +584,12 @@ def _resolve_placeholders(text, doc, client, user):
     amount_str = f"{currency} {raw_amount:,.2f}"
     due_date = doc.get('pay_by_date') or ''
     replacements = {
-        '{{###DOCNUMBER###}}':    doc.get('doc_number', ''),
-        '{{###CLIENTNAME###}}':   display_name,
-        '{{###AMOUNT###}}':       amount_str,
-        '{{###DUEDATE###}}':      due_date,
-        '{{###BUSINESSNAME###}}': user.get('business_name', ''),
+        '{{###DOCNUMBER###}}':         doc.get('doc_number', ''),
+        '{{###CLIENTNAME###}}':        display_name,
+        '{{###AMOUNT###}}':            amount_str,
+        '{{###DUEDATE###}}':           due_date,
+        '{{###YOURBUSINESSNAME###}}':  user.get('business_name', ''),
+        '{{###CLIENTBUSINESSNAME###}}': client.get('company_name', ''),
     }
     for token, value in replacements.items():
         text = text.replace(token, str(value))

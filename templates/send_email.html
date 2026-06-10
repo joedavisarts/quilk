@@ -60,7 +60,7 @@
         <div style="margin-top:4px;">
           <div style="font-size:11px;color:var(--text-dim,#888);margin-bottom:6px;">Available tokens:</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;">
-            {% for token in ['{{###DOCNUMBER###}}','{{###CLIENTNAME###}}','{{###AMOUNT###}}','{{###DUEDATE###}}','{{###BUSINESSNAME###}}'] %}
+            {% for token in ['{{###DOCNUMBER###}}','{{###CLIENTNAME###}}','{{###AMOUNT###}}','{{###DUEDATE###}}','{{###YOURBUSINESSNAME###}}','{{###CLIENTBUSINESSNAME###}}'] %}
             <span class="token-chip" onclick="insertToken('{{ token }}')"
               style="font-size:11px;padding:2px 8px;background:var(--bg-input,#1a1a1a);border:1px solid var(--border,#333);border-radius:3px;cursor:pointer;font-family:monospace;color:var(--text-dim,#aaa);">{{ token }}</span>
             {% endfor %}
