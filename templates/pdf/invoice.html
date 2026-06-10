@@ -126,7 +126,7 @@
     <div class="payment-group-label">{{ group.group }}</div>
     <hr class="payment-group-rule" />
     <div class="payment-grid" {% if not loop.last %}style="margin-bottom:14pt;"{% endif %}>
-      {% for item in group.items %}
+      {% for item in group['items'] %}
       <div class="payment-item">
         <h4>{{ item.label }}</h4>
         <p>{{ item.details | nl2br | safe }}</p>
