@@ -7,7 +7,7 @@
         <img src="{{ logo_b64 }}" alt="{{ user.business_name }}" />
       {% endif %}
       {% if logotype_b64 %}
-        <img src="{{ logotype_b64 }}" alt="{{ user.business_name }}" style="height: 22pt; width: auto; margin-top: 4pt;" />
+        <img src="{{ logotype_b64 }}" alt="{{ user.business_name }}" style="height: 26pt; width: auto; margin-top: 4pt;" />
       {% elif not logo_b64 %}
         <div class="logo-placeholder">{{ user.business_name | upper }}</div>
       {% endif %}

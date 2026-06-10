@@ -5,6 +5,7 @@
   <h1>Clients</h1>
   <div class="header-actions">
     <button id="bulk-delete-btn" class="btn btn-danger hidden" type="button" onclick="bulkDelete()">Delete Selected</button>
+    <button type="button" class="btn btn-gold" onclick="openAddClient()">Add Client</button>
   </div>
 </div>
 
@@ -40,8 +41,65 @@
 </table>
 </form>
 {% else %}
-<p class="empty-state">No clients yet. Create one when you make your first document.</p>
+<p class="empty-state">No clients yet.</p>
 {% endif %}
+
+<!-- Add Client Modal -->
+<div class="modal-overlay hidden" id="add-client-modal" role="dialog" aria-modal="true" aria-label="Add Client">
+  <div class="modal-card" style="max-width:560px;padding:0;">
+    <div class="modal-header">
+      <h3>Add Client</h3>
+      <button type="button" class="modal-close" onclick="closeAddClient()" aria-label="Close">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('clients') }}" id="add-client-form" style="padding:24px 28px 20px;">
+      <div class="field">
+        <label>Company Name</label>
+        <input type="text" name="company_name" id="ac-company" placeholder="Acme Corp (optional)" autocomplete="organization" />
+      </div>
+      <div class="field">
+        <label>Contact Name</label>
+        <input type="text" name="name" id="ac-name" placeholder="Full name (optional)" autocomplete="name" />
+      </div>
+      <p id="ac-name-error" style="color:#e05;font-size:12px;margin:-8px 0 12px;display:none;">Please enter at least a company name or contact name.</p>
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" name="email" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="text" name="phone" autocomplete="tel" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Address Line 1</label>
+        <input type="text" name="address_line1" autocomplete="address-line1" />
+      </div>
+      <div class="field">
+        <label>Address Line 2</label>
+        <input type="text" name="address_line2" autocomplete="address-line2" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>City</label>
+          <input type="text" name="city" autocomplete="address-level2" />
+        </div>
+        <div class="field">
+          <label>Country</label>
+          <input type="text" name="country" autocomplete="country-name" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea name="notes" rows="3"></textarea>
+      </div>
+      <div class="form-actions" style="margin-top:8px;">
+        <button type="button" class="btn btn-outline" onclick="closeAddClient()">Cancel</button>
+        <button type="submit" class="btn btn-gold">Save Client</button>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -74,5 +132,31 @@ function bulkDelete() {
     document.getElementById('bulk-form').submit();
   }
 }
+
+function openAddClient() {
+  const modal = document.getElementById('add-client-modal');
+  modal.classList.remove('hidden');
+  document.getElementById('ac-company').focus();
+}
+
+function closeAddClient() {
+  document.getElementById('add-client-modal').classList.add('hidden');
+  document.getElementById('add-client-form').reset();
+  document.getElementById('ac-name-error').style.display = 'none';
+}
+
+document.getElementById('add-client-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeAddClient();
+});
+
+document.getElementById('add-client-form').addEventListener('submit', function(e) {
+  const company = document.getElementById('ac-company').value.trim();
+  const name = document.getElementById('ac-name').value.trim();
+  if (!company && !name) {
+    e.preventDefault();
+    document.getElementById('ac-name-error').style.display = 'block';
+    document.getElementById('ac-company').focus();
+  }
+});
 </script>
 {% endblock %}

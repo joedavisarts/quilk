@@ -333,7 +333,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user):
     }
 
     if logo_path and os.path.exists(logo_path):
-        logo_html = f'<img src="cid:logo" width="48" height="48" alt="{biz}" style="display:block;" />'
+        logo_html = f'<img src="cid:logo" height="48" alt="{biz}" style="display:block;width:auto;" />'
     else:
         logo_html = (
             f'<div style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;'
@@ -398,7 +398,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user):
           <tr>
             <td style="vertical-align:middle;width:60px;">{logo_html}</td>
             <td style="vertical-align:middle;text-align:right;padding-left:16px;">
-              <span style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:13px;font-weight:700;color:#0E0E0E;letter-spacing:0.05em;">{biz.upper()}</span>
+              <span style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:13px;font-weight:700;color:{accent};letter-spacing:0.05em;">{biz.upper()}</span>
             </td>
           </tr>
         </table>
@@ -693,9 +693,29 @@ def search_documents():
 # Clients
 # ---------------------------------------------------------------------------
 
-@app.route('/clients')
+@app.route('/clients', methods=['GET', 'POST'])
 def clients():
     db = get_db()
+
+    if request.method == 'POST':
+        d = request.form
+        company = (d.get('company_name') or '').strip() or None
+        name = (d.get('name') or '').strip() or None
+        if not company and not name:
+            db.close()
+            return redirect(url_for('clients'))
+        db.execute(
+            "INSERT INTO clients (company_name,name,email,phone,address_line1,"
+            "address_line2,city,country,notes,user_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (company, name, d.get('email') or None, d.get('phone') or None,
+             d.get('address_line1') or None, d.get('address_line2') or None,
+             d.get('city') or None, d.get('country') or None,
+             d.get('notes') or None, current_user.id),
+        )
+        db.commit()
+        db.close()
+        return redirect(url_for('clients'))
+
     rows = _rows_to_list(
         db.execute(
             "SELECT c.*, COUNT(d.id) AS doc_count,"
