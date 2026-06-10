@@ -28,7 +28,7 @@
 
       <div class="field">
         <label>Subject</label>
-        <input type="text" name="subject" value="{{ subject }}" required />
+        <input type="text" id="subject-input" name="subject" value="{{ subject_tpl }}" required />
       </div>
 
       <div class="field">
@@ -43,11 +43,34 @@
     </div>
 
     <div class="form-card">
-      <h2 class="card-title">Email Body Preview</h2>
-      <div class="email-preview">{{ email_body }}</div>
-      <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">
-        Followed by sign-off: Warmest Regards, Joe Davis · Musical Director &amp; Multi-Instrumentalist
-      </p>
+      <h2 class="card-title">Email Body</h2>
+
+      <div class="field" style="display:flex;flex-direction:column;gap:8px;">
+        <textarea id="body-textarea" name="body_text" rows="9"
+          style="width:100%;box-sizing:border-box;background:var(--bg-input,#1a1a1a);color:var(--text,#e8e8e8);border:1px solid var(--border,#333);border-radius:6px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.6;resize:vertical;">{{ body_tpl }}</textarea>
+
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button type="button" id="save-template-btn"
+            style="font-size:12px;padding:5px 12px;background:transparent;border:1px solid var(--border,#444);color:var(--text-dim,#888);border-radius:4px;cursor:pointer;">
+            Save as default
+          </button>
+          <span id="save-template-feedback" style="font-size:12px;color:var(--gold,#DAB322);opacity:0;transition:opacity 0.4s;"></span>
+        </div>
+
+        <div style="margin-top:4px;">
+          <div style="font-size:11px;color:var(--text-dim,#888);margin-bottom:6px;">Available tokens:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            {% for token in ['{{###DOCNUMBER###}}','{{###CLIENTNAME###}}','{{###BUSINESSNAME###}}','{{###DATE###}}','{{###DOCTYPE###}}'] %}
+            <span class="token-chip" onclick="insertToken('{{ token }}')"
+              style="font-size:11px;padding:2px 8px;background:var(--bg-input,#1a1a1a);border:1px solid var(--border,#333);border-radius:3px;cursor:pointer;font-family:monospace;color:var(--text-dim,#aaa);">{{ token }}</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <p style="font-size:11px;color:var(--text-dim,#888);margin:4px 0 0;">
+          Followed by sign-off: Warmest Regards, {{ current_user.display_name }}{% if current_user.title %} · {{ current_user.title }}{% endif %}
+        </p>
+      </div>
     </div>
   </div>
 
@@ -57,4 +80,44 @@
   </div>
 
 </form>
+
+<script>
+function insertToken(token) {
+  const ta = document.getElementById('body-textarea');
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+  ta.selectionStart = ta.selectionEnd = start + token.length;
+  ta.focus();
+}
+
+document.getElementById('save-template-btn').addEventListener('click', function() {
+  const subject = document.getElementById('subject-input').value.trim();
+  const body = document.getElementById('body-textarea').value.trim();
+  const feedback = document.getElementById('save-template-feedback');
+
+  fetch('{{ url_for("save_email_template", doc_id=doc.id) }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subject_template: subject, body_template: body}),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      feedback.textContent = 'Saved as default.';
+    } else {
+      feedback.textContent = 'Save failed: ' + (data.error || 'unknown error');
+      feedback.style.color = '#e55';
+    }
+    feedback.style.opacity = '1';
+    setTimeout(() => { feedback.style.opacity = '0'; }, 2800);
+  })
+  .catch(() => {
+    feedback.textContent = 'Save failed.';
+    feedback.style.color = '#e55';
+    feedback.style.opacity = '1';
+    setTimeout(() => { feedback.style.opacity = '0'; }, 2800);
+  });
+});
+</script>
 {% endblock %}

@@ -337,9 +337,7 @@ def _email_body_text(first_name, doc_number, doc_type, user):
     return bodies[doc_type]
 
 
-def build_html_email(first_name, doc_number, doc_type, logo_path, user):
-    plain = _email_body_text(first_name, doc_number, doc_type, user)
-
+def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_text=None):
     biz = user['business_name']
     accent = user['accent_color']
     accent_dark = user['accent_color_dark']
@@ -371,6 +369,23 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user):
             'It has been a pleasure. Kindly confirm receipt of this email, and feel free to reply directly with any questions.</p>'
         ),
     }
+
+    if body_text is not None:
+        _ps = "font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 16px 0;"
+        body_html = ''.join(
+            f'<p style="{_ps}">{p.strip()}</p>'
+            for p in body_text.split('\n\n') if p.strip()
+        )
+        _so = '\n\nWarmest Regards,\n' + user['display_name']
+        if user.get('title'):
+            _so += '\n' + user['title']
+        _so += '\n\n' + user['business_name']
+        if user.get('business_website'):
+            _so += '\n' + user['business_website']
+        plain = 'Good day,\n\n' + body_text + _so
+    else:
+        body_html = body_paras[doc_type]
+        plain = _email_body_text(first_name, doc_number, doc_type, user)
 
     if logo_path and os.path.exists(logo_path):
         logo_html = f'<img src="cid:logo" height="48" alt="{biz}" style="display:block;width:auto;" />'
@@ -446,7 +461,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user):
       <!-- Body -->
       <tr><td style="padding:36px 40px 8px 40px;">
         <p style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 20px 0;">Good day,</p>
-        {body_paras[doc_type]}
+        {body_html}
       </td></tr>
       <!-- Sign-off -->
       <tr><td style="padding:24px 40px 32px 40px;">
@@ -524,6 +539,47 @@ def _doc_subject(doc_type, user):
         'quote':   f'Confidential: Quote - {biz}',
         'receipt': f'Important: Receipt - {biz}',
     }[doc_type]
+
+
+def _default_email_templates():
+    return {
+        'invoice': {
+            'subject_template': 'Confidential: Invoice {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'body_template': (
+                'Please find your invoice attached, document number {{###DOCNUMBER###}}, for your records.\n\n'
+                'Kindly confirm receipt of this email, and please reply directly with any questions.'
+            ),
+        },
+        'quote': {
+            'subject_template': 'Confidential: Quote {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'body_template': (
+                'Please find your quote attached, document number {{###DOCNUMBER###}}, for your records. '
+                'This quote is valid for two weeks from the date of issue.\n\n'
+                'Kindly confirm receipt of this email, and please reply directly with any questions.'
+            ),
+        },
+        'receipt': {
+            'subject_template': 'Important: Receipt {{###DOCNUMBER###}} - {{###BUSINESSNAME###}}',
+            'body_template': (
+                'Please find your receipt attached, document number {{###DOCNUMBER###}}, for your records.\n\n'
+                'It has been a pleasure. Kindly confirm receipt of this email, and feel free to reply directly with any questions.'
+            ),
+        },
+    }
+
+
+def _resolve_placeholders(text, doc, client, user):
+    first_name = (client.get('name') or '').split()[0] if client.get('name') else 'there'
+    replacements = {
+        '{{###DOCNUMBER###}}':    doc.get('doc_number', ''),
+        '{{###CLIENTNAME###}}':   first_name,
+        '{{###DOCTYPE###}}':      doc.get('doc_type', ''),
+        '{{###BUSINESSNAME###}}': user.get('business_name', ''),
+        '{{###DATE###}}':         doc.get('date_issued', ''),
+    }
+    for token, value in replacements.items():
+        text = text.replace(token, value)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -1232,32 +1288,43 @@ def send_document(doc_id):
         db.execute("SELECT * FROM clients WHERE id=?",
                    (doc['client_id'],)).fetchone()
     ) or {}
+    tpl_row = _row_to_dict(
+        db.execute(
+            "SELECT subject_template, body_template FROM email_templates WHERE user_id=? AND doc_type=?",
+            (current_user.id, doc['doc_type']),
+        ).fetchone()
+    )
     db.close()
 
     user_dict = current_user.to_dict()
     first_name = (client.get('name') or '').split()[0] if client.get('name') else 'there'
-    subject = _doc_subject(doc['doc_type'], user_dict)
-    email_body = _email_body_text(first_name, doc['doc_number'], doc['doc_type'], user_dict)
+    defaults = _default_email_templates()[doc['doc_type']]
+    subject_tpl = (tpl_row or {}).get('subject_template') or defaults['subject_template']
+    body_tpl = (tpl_row or {}).get('body_template') or defaults['body_template']
     pdf_filename = _pdf_email_filename(doc['doc_number'])
     to_email = client.get('email', '')
 
     if request.method == 'GET':
         return render_template('send_email.html',
                                doc=doc, client=client,
-                               subject=subject, email_body=email_body,
+                               subject_tpl=subject_tpl, body_tpl=body_tpl,
                                pdf_filename=pdf_filename,
                                to_email=to_email,
                                error=None)
 
     to_email = request.form.get('to_email', '').strip()
-    subject = request.form.get('subject', subject).strip()
+    subject_raw = request.form.get('subject', subject_tpl).strip()
+    body_raw = request.form.get('body_text', body_tpl).strip()
+    subject = _resolve_placeholders(subject_raw, doc, client, user_dict)
+    body_text = _resolve_placeholders(body_raw, doc, client, user_dict)
     logo_path = os.path.join(ASSETS_DIR, current_user.logo_filename or 'logo.png')
 
     db = get_db()
     try:
         pdf_bytes = generate_pdf(doc, client, user_dict)
         html_body, plain_text = build_html_email(
-            first_name, doc['doc_number'], doc['doc_type'], logo_path, user_dict
+            first_name, doc['doc_number'], doc['doc_type'], logo_path, user_dict,
+            body_text=body_text,
         )
         msg = _build_mime_message(
             to_email, subject, html_body, plain_text,
@@ -1284,17 +1351,48 @@ def send_document(doc_id):
     except Exception as e:
         db.execute(
             "INSERT INTO sent_log (doc_id,recipient_email,subject,status,error_message) VALUES (?,?,?,?,?)",
-            (doc_id, to_email, subject, 'failed', str(e)),
+            (doc_id, to_email, subject_raw, 'failed', str(e)),
         )
         db.commit()
         db.close()
 
         return render_template('send_email.html',
                                doc=doc, client=client,
-                               subject=subject, email_body=email_body,
+                               subject_tpl=subject_raw, body_tpl=body_raw,
                                pdf_filename=pdf_filename,
                                to_email=to_email,
                                error=str(e))
+
+
+@app.route('/documents/<int:doc_id>/save_email_template', methods=['POST'])
+def save_email_template(doc_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT doc_type FROM documents WHERE id=? AND user_id=?",
+        (doc_id, current_user.id),
+    ).fetchone()
+    if not row:
+        db.close()
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+    subject_template = (data.get('subject_template') or '').strip()
+    body_template = (data.get('body_template') or '').strip()
+    if not subject_template or not body_template:
+        db.close()
+        return jsonify({'ok': False, 'error': 'Missing fields'}), 400
+
+    db.execute(
+        """INSERT INTO email_templates (user_id, doc_type, subject_template, body_template)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(user_id, doc_type) DO UPDATE SET
+               subject_template = excluded.subject_template,
+               body_template    = excluded.body_template""",
+        (current_user.id, row['doc_type'], subject_template, body_template),
+    )
+    db.commit()
+    db.close()
+    return jsonify({'ok': True})
 
 
 # ---------------------------------------------------------------------------

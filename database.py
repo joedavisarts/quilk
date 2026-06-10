@@ -122,6 +122,15 @@ def init_db():
             status          TEXT DEFAULT 'sent',
             error_message   TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS email_templates (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id          INTEGER NOT NULL REFERENCES users(id),
+            doc_type         TEXT NOT NULL,
+            subject_template TEXT NOT NULL,
+            body_template    TEXT NOT NULL,
+            UNIQUE(user_id, doc_type)
+        );
     """)
 
     # Safely add columns that may be missing on pre-migration installs
