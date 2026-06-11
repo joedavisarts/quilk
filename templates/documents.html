@@ -57,7 +57,10 @@
       <td>{{ doc.date_issued }}</td>
       <td>{{ doc.currency }}</td>
       <td>{{ doc.amount_due | format_currency }}</td>
-      <td><span class="status status-{{ doc.status }} status-{{ doc.doc_type }}-{{ doc.status }}">{{ doc.status }}</span></td>
+      <td>
+        <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
+        {% if doc.is_overdue %}<span class="status status-overdue" style="margin-left:4px;">overdue</span>{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

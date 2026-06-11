@@ -9,6 +9,7 @@
       <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>
       &nbsp;
       <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
+      {% if is_overdue %}&nbsp;<span class="status status-overdue">overdue</span>{% endif %}
     </span>
   </div>
   <div class="header-actions">

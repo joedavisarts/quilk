@@ -656,6 +656,7 @@ def dashboard():
     for row in recent:
         if row.get('client_id'):
             row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
+        row['is_overdue'] = _is_overdue(row)
     counts = {}
     for dt in ('invoice', 'quote', 'receipt'):
         row = db.execute(
