@@ -13,7 +13,11 @@
       {% endif %}
     </div>
     <div class="header-right">
-      <div class="doc-type-label">Invoice</div>
+      <div class="doc-type-label">
+        {% if doc.invoice_type == 'deposit' %}Deposit Invoice
+        {% elif doc.invoice_type == 'balance' %}Balance Invoice
+        {% else %}Invoice{% endif %}
+      </div>
       <div class="doc-number">{{ doc.doc_number }}</div>
       {% if user.address_line1 %}<div>{{ user.address_line1 }}</div>{% endif %}
       {% if user.address_line2 %}<div>{{ user.address_line2 }}</div>{% endif %}
@@ -67,8 +71,17 @@
       <div class="t-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
       <div class="t-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
       <div class="t-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
+      {% if doc.invoice_type in ('deposit', 'balance') %}
+      {% set project_total = (doc.subtotal or 0) - (doc.discount or 0) + (doc.tax_amount or 0) %}
+      <div class="t-row"><span>Project Total</span><span>{{ doc.currency }} {{ project_total | format_currency }}</span></div>
+      <div class="t-row t-due">
+        <span>{% if doc.invoice_type == 'deposit' %}Deposit Due{% else %}Balance Due{% endif %}</span>
+        <span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span>
+      </div>
+      {% else %}
       <div class="t-row"><span>Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
       <div class="t-row t-due"><span>Amount Due</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+      {% endif %}
     </div>
   </div>
 

@@ -313,6 +313,55 @@ a:hover { text-decoration: underline; }
 .status-paid     { background: rgba(100,200,100,0.15);  color: #7cdb8a; }
 .status-draft    { background: rgba(150,150,150,0.15);  color: #aaa; }
 .status-overdue  { background: rgba(200,80,30,0.18);    color: #e07040; }
+.status-voided   { background: rgba(150,150,150,0.18);  color: #999; text-decoration: line-through; }
+
+/* Generate Invoice dropdown */
+.gen-invoice-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #1a1a1a;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  z-index: 200;
+  min-width: 180px;
+  overflow: hidden;
+}
+.gen-invoice-menu.hidden { display: none !important; }
+.gen-inv-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.gen-inv-item:last-child { border-bottom: none; }
+.gen-inv-item:hover { background: rgba(255,255,255,0.05); color: var(--gold); }
+.gen-inv-item.gen-inv-disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  font-style: italic;
+}
+.gen-inv-lock { font-size: 10px; }
+
+/* Void banner */
+.void-banner {
+  background: rgba(150,150,150,0.1);
+  border: 1px solid rgba(150,150,150,0.3);
+  border-left: 3px solid #888;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  color: #aaa;
+  margin-bottom: 16px;
+}
 
 .status-select {
   border: none;

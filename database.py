@@ -145,6 +145,12 @@ def init_db():
     _add_col('clients', 'user_id', 'INTEGER REFERENCES users(id)')
     _add_col('documents', 'user_id', 'INTEGER REFERENCES users(id)')
     _add_col('item_library', 'user_id', 'INTEGER REFERENCES users(id)')
+    _add_col('documents', 'job_id', 'TEXT')
+    _add_col('documents', 'deposit_amount', 'REAL')
+    _add_col('documents', 'deposit_type', 'TEXT')
+    _add_col('documents', 'invoice_type', 'TEXT')
+    _add_col('documents', 'voided', 'INTEGER NOT NULL DEFAULT 0')
+    _add_col('documents', 'void_reason', 'TEXT')
 
     c.execute("UPDATE documents SET status='pending' WHERE status IN ('draft', 'issued')")
 

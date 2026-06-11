@@ -4,6 +4,7 @@ import csv
 import io
 import os
 import re
+import uuid
 from collections import defaultdict
 from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
@@ -719,15 +720,17 @@ def new_document(doc_type):
 
         prefix = getattr(current_user, f'doc_prefix_{doc_type}')
         doc_number = next_doc_number(doc_type, current_user.id, prefix)
+        job_id = str(uuid.uuid4())
 
         cur = db.execute(
             "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,"
             "currency,line_items,subtotal,discount,tax_amount,paid_amount,"
-            "amount_due,status,notes,pay_by_date,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "amount_due,status,notes,pay_by_date,user_id,job_id) VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (doc_type, doc_number, client_id, doc_date, currency,
              json.dumps(line_items), subtotal, discount, tax_amount,
              paid_amount, amount_due, 'pending', notes, pay_by_date,
-             current_user.id),
+             current_user.id, job_id),
         )
         doc_id = cur.lastrowid
         db.commit()
@@ -1090,6 +1093,54 @@ def documents():
                            filter_type=doc_type, filter_status=status)
 
 
+def _job_capabilities(job_docs, anchor_id):
+    """Return (can_generate_full, can_generate_balance) for the given job."""
+    active_invoices = [
+        d for d in job_docs
+        if d['doc_type'] == 'invoice' and not d.get('voided')
+        and d['id'] != anchor_id
+    ]
+    paid_deposits = [
+        d for d in active_invoices
+        if d.get('invoice_type') == 'deposit' and d['status'] == 'paid'
+    ]
+    has_paid_deposit = bool(paid_deposits)
+    return not has_paid_deposit, has_paid_deposit
+
+
+def _job_overview(job_docs, anchor):
+    """Compute job money overview dict from the full job document list."""
+    if not anchor:
+        return None
+    currency = anchor.get('currency', 'USD')
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0) + (anchor['tax_amount'] or 0)
+
+    active = [d for d in job_docs if not d.get('voided')]
+    voided = [d for d in job_docs if d.get('voided')]
+
+    # Invoices that are children of the anchor (not the anchor itself)
+    amount_billed = sum(
+        (d['amount_due'] or 0) for d in active
+        if d['doc_type'] == 'invoice' and d['id'] != anchor['id']
+    )
+    amount_paid = sum(
+        (d['paid_amount'] or 0) for d in active
+        if d['doc_type'] == 'receipt'
+    )
+    voided_received = sum(
+        (d['paid_amount'] or 0) for d in voided
+        if d['doc_type'] == 'receipt' and d.get('paid_amount')
+    )
+    return {
+        'currency': currency,
+        'project_total': project_total,
+        'amount_billed': amount_billed,
+        'amount_paid': amount_paid,
+        'balance_outstanding': project_total - amount_paid,
+        'voided_received': voided_received,
+    }
+
+
 @app.route('/documents/<int:doc_id>')
 def document_view(doc_id):
     db = get_db()
@@ -1120,16 +1171,60 @@ def document_view(doc_id):
     ) if doc.get('source_document_id') else None
     child_docs = _rows_to_list(
         db.execute(
-            "SELECT id, doc_type, doc_number FROM documents"
+            "SELECT id, doc_type, doc_number, status, voided FROM documents"
             " WHERE source_document_id=? AND user_id=? ORDER BY created_at",
             (doc_id, current_user.id),
         ).fetchall()
     )
+
+    # Job family + capabilities
+    job_family = []
+    job_overview = None
+    can_generate_full = True
+    can_generate_balance = False
+    is_anchor = (
+        doc['doc_type'] == 'quote'
+        or (doc['doc_type'] == 'invoice' and not doc.get('source_document_id'))
+    )
+
+    job_id = doc.get('job_id')
+    if job_id:
+        job_docs = _rows_to_list(db.execute(
+            "SELECT d.id, d.doc_type, d.doc_number, d.status, d.voided,"
+            " d.invoice_type, d.amount_due, d.paid_amount, d.source_document_id,"
+            " d.subtotal, d.discount, d.tax_amount, d.job_id, d.created_at,"
+            " d.pay_by_date,"
+            " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
+            " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
+            " WHERE d.job_id=? AND d.user_id=? ORDER BY d.created_at",
+            (job_id, current_user.id),
+        ).fetchall())
+        for jd in job_docs:
+            jd['is_overdue'] = _is_overdue(jd)
+        job_family = job_docs
+
+        anchor = next(
+            (d for d in job_docs if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
+            None,
+        )
+        can_generate_full, can_generate_balance = _job_capabilities(job_docs, anchor['id'] if anchor else None)
+        job_overview = _job_overview(job_docs, anchor)
+
     db.close()
-    return render_template('document_view.html', doc=doc, client=client,
-                           sent_logs=sent_logs,
-                           parent_doc=parent_doc, child_docs=child_docs,
-                           is_overdue=_is_overdue(doc))
+    return render_template(
+        'document_view.html',
+        doc=doc,
+        client=client,
+        sent_logs=sent_logs,
+        parent_doc=parent_doc,
+        child_docs=child_docs,
+        is_overdue=_is_overdue(doc),
+        job_family=job_family,
+        job_overview=job_overview,
+        is_anchor=is_anchor,
+        can_generate_full=can_generate_full,
+        can_generate_balance=can_generate_balance,
+    )
 
 
 @app.route('/documents/<int:doc_id>/pdf')
@@ -1186,28 +1281,90 @@ def set_status(doc_id):
     return redirect(url_for('document_view', doc_id=doc_id))
 
 
-@app.route('/documents/<int:doc_id>/create_invoice', methods=['POST'])
-def create_invoice_from_quote(doc_id):
+@app.route('/documents/<int:doc_id>/generate_invoice', methods=['POST'])
+def generate_invoice(doc_id):
+    """Generate a full, deposit, or balance invoice from an anchor document."""
+    invoice_type = request.form.get('invoice_type', 'full')
+    if invoice_type not in ('full', 'deposit', 'balance'):
+        abort(400)
+
     db = get_db()
-    quote = _row_to_dict(
-        db.execute(
-            "SELECT * FROM documents WHERE id=? AND doc_type='quote' AND user_id=?"
-            " AND status='accepted'",
-            (doc_id, current_user.id),
-        ).fetchone()
-    )
-    if not quote:
+
+    # The anchor must be an accepted quote OR a standalone invoice owned by this user
+    anchor = _row_to_dict(db.execute(
+        "SELECT * FROM documents WHERE id=? AND user_id=?"
+        " AND ((doc_type='quote' AND status='accepted')"
+        "      OR (doc_type='invoice' AND source_document_id IS NULL))",
+        (doc_id, current_user.id),
+    ).fetchone())
+    if not anchor:
         db.close()
         abort(400)
+
+    job_id = anchor.get('job_id') or str(uuid.uuid4())
+
+    # Load job docs for gating checks
+    job_docs = _rows_to_list(db.execute(
+        "SELECT id, doc_type, status, voided, invoice_type, amount_due"
+        " FROM documents WHERE job_id=? AND user_id=?",
+        (job_id, current_user.id),
+    ).fetchall())
+
+    can_full, can_balance = _job_capabilities(job_docs, doc_id)
+
+    if invoice_type == 'full' and not can_full:
+        db.close()
+        flash('Full invoice is locked — a deposit invoice has already been paid.', 'error')
+        return redirect(url_for('document_view', doc_id=doc_id))
+
+    if invoice_type == 'balance' and not can_balance:
+        db.close()
+        flash('Balance invoice requires a paid deposit invoice first.', 'error')
+        return redirect(url_for('document_view', doc_id=doc_id))
+
+    # Compute amounts
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0) + (anchor['tax_amount'] or 0)
+
+    deposit_amount_stored = None
+    deposit_type_stored = None
+
+    if invoice_type == 'full':
+        amount_due = project_total
+    elif invoice_type == 'deposit':
+        try:
+            deposit_val = float(request.form.get('deposit_val', 0))
+        except (TypeError, ValueError):
+            db.close()
+            flash('Invalid deposit amount.', 'error')
+            return redirect(url_for('document_view', doc_id=doc_id))
+        deposit_type_stored = request.form.get('deposit_type', 'flat')
+        if deposit_type_stored == 'percent':
+            amount_due = project_total * deposit_val / 100
+        else:
+            amount_due = deposit_val
+        deposit_amount_stored = amount_due
+    else:  # balance
+        paid_deposits = [
+            d for d in job_docs
+            if d['doc_type'] == 'invoice' and not d.get('voided')
+            and d.get('invoice_type') == 'deposit' and d['status'] == 'paid'
+        ]
+        already_invoiced = sum(d['amount_due'] or 0 for d in paid_deposits)
+        amount_due = project_total - already_invoiced
+
     doc_number = next_doc_number('invoice', current_user.id, current_user.doc_prefix_invoice)
     cur = db.execute(
-        "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,currency,"
-        "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
-        "source_document_id,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ('invoice', doc_number, quote['client_id'], date.today().isoformat(),
-         quote['currency'], quote['line_items'], quote['subtotal'],
-         quote['discount'], quote['tax_amount'], 0,
-         quote['amount_due'], 'pending', quote['notes'], doc_id, current_user.id),
+        "INSERT INTO documents (doc_type, doc_number, client_id, date_issued, currency,"
+        " line_items, subtotal, discount, tax_amount, paid_amount, amount_due, status,"
+        " notes, source_document_id, user_id, job_id, invoice_type,"
+        " deposit_amount, deposit_type)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ('invoice', doc_number, anchor['client_id'], date.today().isoformat(),
+         anchor['currency'], anchor['line_items'], anchor['subtotal'],
+         anchor['discount'], anchor['tax_amount'], 0,
+         amount_due, 'pending', anchor['notes'],
+         doc_id, current_user.id, job_id, invoice_type,
+         deposit_amount_stored, deposit_type_stored),
     )
     invoice_id = cur.lastrowid
     db.commit()
@@ -1232,16 +1389,51 @@ def generate_receipt_from_invoice(doc_id):
     cur = db.execute(
         "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,currency,"
         "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
-        "source_document_id,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "source_document_id,user_id,job_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ('receipt', doc_number, invoice['client_id'], date.today().isoformat(),
          invoice['currency'], invoice['line_items'], invoice['subtotal'],
          invoice['discount'], invoice['tax_amount'], invoice['amount_due'],
-         0, 'pending', invoice['notes'], doc_id, current_user.id),
+         0, 'pending', invoice['notes'], doc_id, current_user.id,
+         invoice.get('job_id')),
     )
     receipt_id = cur.lastrowid
     db.commit()
     db.close()
     return redirect(url_for('document_view', doc_id=receipt_id))
+
+
+@app.route('/documents/<int:doc_id>/void', methods=['POST'])
+def void_document(doc_id):
+    db = get_db()
+    doc = _row_to_dict(db.execute(
+        "SELECT id, doc_type, voided, source_document_id FROM documents"
+        " WHERE id=? AND user_id=?",
+        (doc_id, current_user.id),
+    ).fetchone())
+    if not doc:
+        db.close()
+        abort(404)
+
+    currently_voided = bool(doc.get('voided'))
+    new_voided = 0 if currently_voided else 1
+    void_reason = request.form.get('void_reason', '').strip() or None if new_voided else None
+
+    db.execute(
+        "UPDATE documents SET voided=?, void_reason=? WHERE id=? AND user_id=?",
+        (new_voided, void_reason, doc_id, current_user.id),
+    )
+
+    # Cascade to linked receipt (child doc with doc_type='receipt')
+    if doc['doc_type'] == 'invoice':
+        db.execute(
+            "UPDATE documents SET voided=?, void_reason=?"
+            " WHERE source_document_id=? AND doc_type='receipt' AND user_id=?",
+            (new_voided, void_reason, doc_id, current_user.id),
+        )
+
+    db.commit()
+    db.close()
+    return redirect(url_for('document_view', doc_id=doc_id))
 
 
 @app.route('/documents/bulk_delete', methods=['POST'])

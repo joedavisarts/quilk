@@ -1,15 +1,94 @@
 {% extends "base.html" %}
 {% block title %}{{ doc.doc_number }} — Quilk{% endblock %}
 {% block content %}
+
+{# ── Deposit-invoice modal ─────────────────────────────────────────────── #}
+<div class="modal-overlay hidden" id="deposit-modal">
+  <div class="modal-card" style="width:420px;max-width:95vw;">
+    <div class="modal-header">
+      <h3>Deposit Invoice</h3>
+      <button class="modal-close" onclick="document.getElementById('deposit-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <div style="padding:24px;">
+      <form method="POST" action="{{ url_for('generate_invoice', doc_id=doc.id) }}">
+        <input type="hidden" name="invoice_type" value="deposit">
+        <div class="form-group">
+          <label class="form-label">Deposit Type</label>
+          <select name="deposit_type" id="deposit-type-sel" class="form-control" onchange="updateDepositHint()">
+            <option value="percent">Percentage (%)</option>
+            <option value="flat">Flat Amount</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-top:14px;">
+          <label class="form-label" id="deposit-val-label">Deposit Percentage</label>
+          <input type="number" name="deposit_val" id="deposit-val" class="form-control"
+                 step="0.01" min="0.01" required placeholder="e.g. 50">
+          <p id="deposit-hint" style="font-size:12.5px;color:var(--text-muted);margin-top:6px;"></p>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+          <button type="button" class="btn btn-outline"
+                  onclick="document.getElementById('deposit-modal').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn btn-gold">Create Deposit Invoice</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Void modal ────────────────────────────────────────────────────────── #}
+<div class="modal-overlay hidden" id="void-modal">
+  <div class="modal-card" style="width:400px;max-width:95vw;">
+    <div class="modal-header">
+      <h3>{% if doc.voided %}Un-void Document{% else %}Void Document{% endif %}</h3>
+      <button class="modal-close" onclick="document.getElementById('void-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <div style="padding:24px;">
+      <form method="POST" action="{{ url_for('void_document', doc_id=doc.id) }}">
+        {% if not doc.voided %}
+        <div class="form-group">
+          <label class="form-label">Reason (optional)</label>
+          <input type="text" name="void_reason" class="form-control"
+                 placeholder="e.g. Client cancelled, duplicate, etc.">
+        </div>
+        {% endif %}
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+          {% if doc.voided %}
+            This will restore the document to the active job flow and re-include it in money calculations.
+            {% if doc.doc_type == 'invoice' %}Its linked receipt will also be un-voided.{% endif %}
+          {% else %}
+            Voiding removes this document from job money calculations.
+            The document stays visible and keeps its status.
+            {% if doc.doc_type == 'invoice' %}Its linked receipt will also be voided.{% endif %}
+            Voiding is reversible.
+          {% endif %}
+        </p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-outline"
+                  onclick="document.getElementById('void-modal').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn {% if doc.voided %}btn-outline{% else %}btn-danger{% endif %}">
+            {% if doc.voided %}Un-void{% else %}Void{% endif %} Document
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Page header ───────────────────────────────────────────────────────── #}
 <div class="page-header">
   <div>
     <a href="{{ url_for('documents') }}" class="btn btn-xs btn-outline" style="margin-bottom:10px;">← Back</a>
     <h1>{{ doc.doc_number }}</h1>
     <span class="page-sub">
-      <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>
+      <span class="badge badge-{{ doc.doc_type }}">
+        {% if doc.invoice_type == 'deposit' %}deposit inv
+        {% elif doc.invoice_type == 'balance' %}balance inv
+        {% else %}{{ doc.doc_type }}{% endif %}
+      </span>
       &nbsp;
       <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
       {% if is_overdue %}&nbsp;<span class="status status-overdue">overdue</span>{% endif %}
+      {% if doc.voided %}&nbsp;<span class="status status-voided">void</span>{% endif %}
     </span>
   </div>
   <div class="header-actions">
@@ -36,10 +115,44 @@
     </form>
     {% endif %}
 
-    {% if doc.doc_type == 'quote' and doc.status == 'accepted' %}
-    <form method="POST" action="{{ url_for('create_invoice_from_quote', doc_id=doc.id) }}" style="display:inline">
-      <button type="submit" class="btn btn-gold">Generate Invoice</button>
-    </form>
+    {# ── Generate Invoice dropdown — shown for anchors ── #}
+    {% if is_anchor and (doc.doc_type != 'quote' or doc.status == 'accepted') %}
+    <div class="gen-invoice-dropdown" id="gen-inv-wrap" style="display:inline-block;position:relative;">
+      <button class="btn btn-gold" type="button" onclick="toggleGenMenu(event)">
+        Generate Invoice ▾
+      </button>
+      <div class="gen-invoice-menu hidden" id="gen-inv-menu">
+        {# Full Invoice #}
+        {% if can_generate_full %}
+        <form method="POST" action="{{ url_for('generate_invoice', doc_id=doc.id) }}">
+          <input type="hidden" name="invoice_type" value="full">
+          <button type="submit" class="gen-inv-item">Full Invoice</button>
+        </form>
+        {% else %}
+        <span class="gen-inv-item gen-inv-disabled" title="Locked — a deposit invoice has been paid">
+          Full Invoice <span class="gen-inv-lock">●</span>
+        </span>
+        {% endif %}
+
+        {# Deposit Invoice — always creatable #}
+        <button type="button" class="gen-inv-item"
+                onclick="document.getElementById('gen-inv-menu').classList.add('hidden');document.getElementById('deposit-modal').classList.remove('hidden')">
+          Deposit Invoice
+        </button>
+
+        {# Balance Invoice #}
+        {% if can_generate_balance %}
+        <form method="POST" action="{{ url_for('generate_invoice', doc_id=doc.id) }}">
+          <input type="hidden" name="invoice_type" value="balance">
+          <button type="submit" class="gen-inv-item">Balance Invoice</button>
+        </form>
+        {% else %}
+        <span class="gen-inv-item gen-inv-disabled" title="Requires a paid deposit invoice first">
+          Balance Invoice <span class="gen-inv-lock">○</span>
+        </span>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
 
     {% if doc.doc_type == 'invoice' and doc.status == 'paid' %}
@@ -48,11 +161,31 @@
     </form>
     {% endif %}
 
-    <form method="POST" action="{{ url_for('delete_document', doc_id=doc.id) }}" style="display:inline" onsubmit="return confirm('Delete this document? This cannot be undone.')">
+    {# Void / Un-void #}
+    <button type="button"
+            class="btn {% if doc.voided %}btn-outline{% else %}btn-outline{% endif %}"
+            style="{% if not doc.voided %}border-color:#888;color:#888;{% endif %}"
+            onclick="document.getElementById('void-modal').classList.remove('hidden')">
+      {% if doc.voided %}Un-void{% else %}Void{% endif %}
+    </button>
+
+    <form method="POST" action="{{ url_for('delete_document', doc_id=doc.id) }}" style="display:inline"
+          onsubmit="return confirm('Delete this document? This cannot be undone.')">
       <button type="submit" class="btn btn-danger">Delete</button>
     </form>
   </div>
 </div>
+
+{# ── Void notice banner ────────────────────────────────────────────────── #}
+{% if doc.voided %}
+<div class="void-banner">
+  <strong>VOID</strong>
+  {% if doc.void_reason %} — {{ doc.void_reason }}{% endif %}
+  <span style="color:var(--text-muted);font-size:12.5px;margin-left:8px;">
+    This document is excluded from job money calculations.
+  </span>
+</div>
+{% endif %}
 
 <div class="detail-grid">
   <div class="form-card">
@@ -102,12 +235,77 @@
     <div class="total-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
     <div class="total-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
     <div class="total-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
+    {% if doc.invoice_type in ('deposit', 'balance') %}
+    {# For deposit/balance invoices show project total then the special amount-due line #}
+    {% set project_total = (doc.subtotal or 0) - (doc.discount or 0) + (doc.tax_amount or 0) %}
+    <div class="total-row"><span>Project Total</span><span>{{ doc.currency }} {{ project_total | format_currency }}</span></div>
+    <div class="total-row total-due">
+      <span>{% if doc.invoice_type == 'deposit' %}Deposit Due{% else %}Balance Due{% endif %}</span>
+      <span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span>
+    </div>
+    {% else %}
     <div class="total-row"><span>Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
     <div class="total-row total-due"><span>Amount Due</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+    {% endif %}
   </div>
 </div>
 
-{% if parent_doc or child_docs %}
+{# ── Job Family + Money Overview ───────────────────────────────────────── #}
+{% if job_family and job_family|length > 1 %}
+<div class="form-card full-width">
+  <h2 class="card-title">Job Family</h2>
+  <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">
+    {% for jd in job_family %}
+    <div style="display:flex;align-items:center;gap:8px;font-size:14px;
+                {% if jd.id == doc.id %}opacity:1;{% else %}opacity:0.85;{% endif %}">
+      <a href="{{ url_for('document_view', doc_id=jd.id) }}"
+         style="color:var(--gold);text-decoration:none;font-weight:{% if jd.id == doc.id %}700{% else %}400{% endif %};">
+        <span class="badge badge-{{ jd.doc_type }}">
+          {% if jd.invoice_type == 'deposit' %}dep{% elif jd.invoice_type == 'balance' %}bal{% elif jd.invoice_type == 'full' %}full{% else %}{{ jd.doc_type[:3] }}{% endif %}
+        </span>
+        &nbsp;{{ jd.doc_number }}
+      </a>
+      <span class="status status-{{ jd.status }}" style="font-size:11.5px;padding:1px 7px;">{{ jd.status }}</span>
+      {% if jd.is_overdue %}<span class="status status-overdue" style="font-size:11.5px;padding:1px 7px;">overdue</span>{% endif %}
+      {% if jd.voided %}<span class="status status-voided" style="font-size:11.5px;padding:1px 7px;">void</span>{% endif %}
+      {% if jd.id == doc.id %}<span style="color:var(--text-muted);font-size:11.5px;">← current</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if job_overview %}
+  <div style="border-top:1px solid var(--border);padding-top:16px;">
+    <h2 class="card-title" style="margin-bottom:12px;">Job Money Overview</h2>
+    <div class="totals-summary" style="max-width:340px;">
+      <div class="total-row">
+        <span>Project Total</span>
+        <span>{{ job_overview.currency }} {{ job_overview.project_total | format_currency }}</span>
+      </div>
+      <div class="total-row">
+        <span>Amount Billed</span>
+        <span>{{ job_overview.currency }} {{ job_overview.amount_billed | format_currency }}</span>
+      </div>
+      <div class="total-row">
+        <span>Amount Paid</span>
+        <span>{{ job_overview.currency }} {{ job_overview.amount_paid | format_currency }}</span>
+      </div>
+      <div class="total-row total-due">
+        <span>Balance Outstanding</span>
+        <span>{{ job_overview.currency }} {{ job_overview.balance_outstanding | format_currency }}</span>
+      </div>
+    </div>
+    {% if job_overview.voided_received %}
+    <p style="font-size:12.5px;color:var(--text-muted);margin-top:10px;">
+      Voided: {{ job_overview.currency }} {{ job_overview.voided_received | format_currency }} received on voided document(s) — not included above.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Legacy parent/child linked doc display (for docs without job family yet) #}
+{% if (parent_doc or child_docs) and (not job_family or job_family|length <= 1) %}
 <div class="form-card full-width">
   <h2 class="card-title">Linked Documents</h2>
   <div style="display:flex;flex-direction:column;gap:8px;">
@@ -127,6 +325,7 @@
         <span class="badge badge-{{ child.doc_type }}">{{ child.doc_type }}</span>
         &nbsp;{{ child.doc_number }}
       </a>
+      {% if child.voided %}<span class="status status-voided" style="font-size:11.5px;padding:1px 7px;">void</span>{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -149,4 +348,44 @@
   {% endfor %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Generate Invoice dropdown
+function toggleGenMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('gen-inv-menu');
+  menu.classList.toggle('hidden');
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('gen-inv-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('gen-inv-menu')?.classList.add('hidden');
+  }
+});
+
+// Deposit modal hint
+function updateDepositHint() {
+  const sel = document.getElementById('deposit-type-sel');
+  const lbl = document.getElementById('deposit-val-label');
+  const hint = document.getElementById('deposit-hint');
+  if (sel.value === 'percent') {
+    lbl.textContent = 'Deposit Percentage';
+    hint.textContent = 'Enter a number between 0 and 100.';
+  } else {
+    lbl.textContent = 'Deposit Amount';
+    hint.textContent = 'Enter the flat deposit amount in {{ doc.currency }}.';
+  }
+}
+updateDepositHint();
+
+// Close modals on overlay click
+['deposit-modal','void-modal'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('click', function(e) {
+    if (e.target === el) el.classList.add('hidden');
+  });
+});
+</script>
 {% endblock %}
