@@ -307,12 +307,12 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   text-transform: uppercase;
 }
-.status-pending { background: rgba(192,57,43,0.15); color: #e07070; }
-.status-sent { background: rgba(100,200,100,0.15); color: #7cdb8a; }
-.status-invoice-sent { background: rgba(230,140,30,0.15); color: #e6a830; }
-.status-paid { background: rgba(100,200,100,0.15); color: #7cdb8a; }
-.status-draft { background: rgba(150,150,150,0.15); color: #aaa; }
-.status-overdue { background: rgba(200,80,30,0.18); color: #e07040; }
+.status-pending  { background: rgba(192,57,43,0.15);   color: #e07070; }
+.status-sent     { background: rgba(230,140,30,0.15);   color: #e6a830; }
+.status-accepted { background: rgba(60,160,210,0.15);   color: #5cb8e0; }
+.status-paid     { background: rgba(100,200,100,0.15);  color: #7cdb8a; }
+.status-draft    { background: rgba(150,150,150,0.15);  color: #aaa; }
+.status-overdue  { background: rgba(200,80,30,0.18);    color: #e07040; }
 
 .status-select {
   border: none;
@@ -914,6 +914,18 @@ body[data-theme="light"] .modal-items-table td {
 body[data-theme="light"] .status-pending {
   background: rgba(192,57,43,0.1);
   color: #c0392b;
+}
+body[data-theme="light"] .status-sent {
+  background: rgba(230,140,30,0.12);
+  color: #b87800;
+}
+body[data-theme="light"] .status-accepted {
+  background: rgba(60,160,210,0.12);
+  color: #1a7aaa;
+}
+body[data-theme="light"] .status-paid {
+  background: rgba(60,160,60,0.12);
+  color: #2a7a2a;
 }
 body[data-theme="light"] ::-webkit-scrollbar-track { background: #f0f0f0; }
 body[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cccccc; }

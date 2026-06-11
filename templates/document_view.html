@@ -8,15 +8,7 @@
     <span class="page-sub">
       <span class="badge badge-{{ doc.doc_type }}">{{ doc.doc_type }}</span>
       &nbsp;
-      <form method="POST" action="{{ url_for('set_status', doc_id=doc.id) }}" style="display:inline">
-        <select name="status" class="status-select status-{{ doc.status }}" onchange="this.form.submit()">
-          <option value="draft" {% if doc.status == 'draft' %}selected{% endif %}>Draft</option>
-          <option value="pending" {% if doc.status == 'pending' %}selected{% endif %}>Pending</option>
-          <option value="sent" {% if doc.status == 'sent' %}selected{% endif %}>Sent</option>
-          <option value="paid" {% if doc.status == 'paid' %}selected{% endif %}>Paid</option>
-          <option value="overdue" {% if doc.status == 'overdue' %}selected{% endif %}>Overdue</option>
-        </select>
-      </form>
+      <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
     </span>
   </div>
   <div class="header-actions">
@@ -24,9 +16,37 @@
     <a href="{{ url_for('document_pdf', doc_id=doc.id) }}" target="_blank" class="btn btn-outline">Preview PDF</a>
     <a href="{{ url_for('document_pdf', doc_id=doc.id) }}?download=1" class="btn btn-outline">Download PDF</a>
     <a href="{{ url_for('send_document', doc_id=doc.id) }}" class="btn btn-outline">Send to Client</a>
+
     {% if is_overdue %}
     <a href="{{ url_for('remind_document', doc_id=doc.id) }}" class="btn btn-warn">Send Reminder</a>
     {% endif %}
+
+    {% if doc.doc_type == 'quote' and doc.status in ('pending', 'sent') %}
+    <form method="POST" action="{{ url_for('set_status', doc_id=doc.id) }}" style="display:inline">
+      <input type="hidden" name="status" value="accepted">
+      <button type="submit" class="btn btn-outline">Mark as Accepted</button>
+    </form>
+    {% endif %}
+
+    {% if doc.doc_type == 'invoice' and doc.status in ('pending', 'sent') %}
+    <form method="POST" action="{{ url_for('set_status', doc_id=doc.id) }}" style="display:inline">
+      <input type="hidden" name="status" value="paid">
+      <button type="submit" class="btn btn-outline">Mark as Paid</button>
+    </form>
+    {% endif %}
+
+    {% if doc.doc_type == 'quote' and doc.status == 'accepted' %}
+    <form method="POST" action="{{ url_for('create_invoice_from_quote', doc_id=doc.id) }}" style="display:inline">
+      <button type="submit" class="btn btn-gold">Generate Invoice</button>
+    </form>
+    {% endif %}
+
+    {% if doc.doc_type == 'invoice' and doc.status == 'paid' %}
+    <form method="POST" action="{{ url_for('generate_receipt_from_invoice', doc_id=doc.id) }}" style="display:inline">
+      <button type="submit" class="btn btn-gold">Generate Receipt</button>
+    </form>
+    {% endif %}
+
     <form method="POST" action="{{ url_for('delete_document', doc_id=doc.id) }}" style="display:inline" onsubmit="return confirm('Delete this document? This cannot be undone.')">
       <button type="submit" class="btn btn-danger">Delete</button>
     </form>
@@ -86,6 +106,32 @@
   </div>
 </div>
 
+{% if parent_doc or child_docs %}
+<div class="form-card full-width">
+  <h2 class="card-title">Linked Documents</h2>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    {% if parent_doc %}
+    <div style="font-size:14.3px;color:var(--text-muted);">
+      Generated from:&nbsp;
+      <a href="{{ url_for('document_view', doc_id=parent_doc.id) }}" style="color:var(--gold);text-decoration:none;">
+        <span class="badge badge-{{ parent_doc.doc_type }}">{{ parent_doc.doc_type }}</span>
+        &nbsp;{{ parent_doc.doc_number }}
+      </a>
+    </div>
+    {% endif %}
+    {% for child in child_docs %}
+    <div style="font-size:14.3px;color:var(--text-muted);">
+      Linked {{ child.doc_type | capitalize }}:&nbsp;
+      <a href="{{ url_for('document_view', doc_id=child.id) }}" style="color:var(--gold);text-decoration:none;">
+        <span class="badge badge-{{ child.doc_type }}">{{ child.doc_type }}</span>
+        &nbsp;{{ child.doc_number }}
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if sent_logs %}
 <div class="form-card full-width">
   <h2 class="card-title">Email History</h2>
@@ -102,14 +148,4 @@
   {% endfor %}
 </div>
 {% endif %}
-{% endblock %}
-{% block scripts %}
-<script>
-const sel = document.querySelector('.status-select');
-if (sel) {
-  sel.addEventListener('change', () => {
-    sel.className = 'status-select status-' + sel.value;
-  });
-}
-</script>
 {% endblock %}

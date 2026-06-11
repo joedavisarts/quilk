@@ -18,11 +18,10 @@
   </select>
   <select name="status" onchange="this.form.submit()">
     <option value="" {% if not filter_status %}selected{% endif %}>All Statuses</option>
-    <option value="draft" {% if filter_status=='draft' %}selected{% endif %}>Draft</option>
-    <option value="pending" {% if filter_status=='pending' %}selected{% endif %}>Pending</option>
-    <option value="sent" {% if filter_status=='sent' %}selected{% endif %}>Sent</option>
-    <option value="paid" {% if filter_status=='paid' %}selected{% endif %}>Paid</option>
-    <option value="overdue" {% if filter_status=='overdue' %}selected{% endif %}>Overdue</option>
+    <option value="pending"  {% if filter_status=='pending'  %}selected{% endif %}>Pending</option>
+    <option value="sent"     {% if filter_status=='sent'     %}selected{% endif %}>Sent</option>
+    <option value="accepted" {% if filter_status=='accepted' %}selected{% endif %}>Accepted</option>
+    <option value="paid"     {% if filter_status=='paid'     %}selected{% endif %}>Paid</option>
   </select>
 </form>
 

@@ -1111,15 +1111,23 @@ def document_view(doc_id):
             (doc_id,),
         ).fetchall()
     )
-    linked_doc = _row_to_dict(
+    parent_doc = _row_to_dict(
         db.execute(
-            "SELECT id, doc_type FROM documents WHERE source_document_id=? AND user_id=? LIMIT 1",
-            (doc_id, current_user.id),
+            "SELECT id, doc_type, doc_number FROM documents WHERE id=?",
+            (doc.get('source_document_id'),),
         ).fetchone()
+    ) if doc.get('source_document_id') else None
+    child_docs = _rows_to_list(
+        db.execute(
+            "SELECT id, doc_type, doc_number FROM documents"
+            " WHERE source_document_id=? AND user_id=? ORDER BY created_at",
+            (doc_id, current_user.id),
+        ).fetchall()
     )
     db.close()
     return render_template('document_view.html', doc=doc, client=client,
-                           sent_logs=sent_logs, linked_doc=linked_doc,
+                           sent_logs=sent_logs,
+                           parent_doc=parent_doc, child_docs=child_docs,
                            is_overdue=_is_overdue(doc))
 
 
@@ -1150,17 +1158,30 @@ def document_pdf(doc_id):
                      as_attachment=not inline, download_name=filename)
 
 
+_VALID_STATUSES = {
+    'invoice': {'pending', 'sent', 'paid'},
+    'quote':   {'pending', 'sent', 'accepted'},
+    'receipt': {'pending', 'sent'},
+}
+
+
 @app.route('/documents/<int:doc_id>/set_status', methods=['POST'])
 def set_status(doc_id):
-    status = request.form.get('status', '')
-    if status:
-        db = get_db()
+    status = request.form.get('status', '').strip()
+    if not status:
+        return redirect(url_for('document_view', doc_id=doc_id))
+    db = get_db()
+    row = _row_to_dict(db.execute(
+        "SELECT doc_type FROM documents WHERE id=? AND user_id=?",
+        (doc_id, current_user.id),
+    ).fetchone())
+    if row and status in _VALID_STATUSES.get(row['doc_type'], set()):
         db.execute(
             "UPDATE documents SET status=? WHERE id=? AND user_id=?",
             (status, doc_id, current_user.id),
         )
         db.commit()
-        db.close()
+    db.close()
     return redirect(url_for('document_view', doc_id=doc_id))
 
 
@@ -1169,7 +1190,8 @@ def create_invoice_from_quote(doc_id):
     db = get_db()
     quote = _row_to_dict(
         db.execute(
-            "SELECT * FROM documents WHERE id=? AND doc_type='quote' AND user_id=?",
+            "SELECT * FROM documents WHERE id=? AND doc_type='quote' AND user_id=?"
+            " AND status='accepted'",
             (doc_id, current_user.id),
         ).fetchone()
     )
@@ -1190,6 +1212,35 @@ def create_invoice_from_quote(doc_id):
     db.commit()
     db.close()
     return redirect(url_for('document_view', doc_id=invoice_id))
+
+
+@app.route('/documents/<int:doc_id>/create_receipt', methods=['POST'])
+def generate_receipt_from_invoice(doc_id):
+    db = get_db()
+    invoice = _row_to_dict(
+        db.execute(
+            "SELECT * FROM documents WHERE id=? AND doc_type='invoice' AND user_id=?"
+            " AND status='paid'",
+            (doc_id, current_user.id),
+        ).fetchone()
+    )
+    if not invoice:
+        db.close()
+        abort(400)
+    doc_number = next_doc_number('receipt', current_user.id, current_user.doc_prefix_receipt)
+    cur = db.execute(
+        "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,currency,"
+        "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
+        "source_document_id,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ('receipt', doc_number, invoice['client_id'], date.today().isoformat(),
+         invoice['currency'], invoice['line_items'], invoice['subtotal'],
+         invoice['discount'], invoice['tax_amount'], invoice['amount_due'],
+         0, 'pending', invoice['notes'], doc_id, current_user.id),
+    )
+    receipt_id = cur.lastrowid
+    db.commit()
+    db.close()
+    return redirect(url_for('document_view', doc_id=receipt_id))
 
 
 @app.route('/documents/bulk_delete', methods=['POST'])
@@ -1395,6 +1446,10 @@ def send_document(doc_id):
         db.execute(
             "INSERT INTO sent_log (doc_id,recipient_email,subject,status) VALUES (?,?,?,?)",
             (doc_id, to_email, subject, 'sent'),
+        )
+        db.execute(
+            "UPDATE documents SET status='sent' WHERE id=? AND user_id=? AND status='pending'",
+            (doc_id, current_user.id),
         )
         db.commit()
         db.close()
