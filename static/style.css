@@ -320,10 +320,10 @@ a:hover { text-decoration: underline; }
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  background: #1a1a1a;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
   z-index: 200;
   min-width: 180px;
   overflow: hidden;
@@ -343,13 +343,42 @@ a:hover { text-decoration: underline; }
   transition: background 0.12s;
 }
 .gen-inv-item:last-child { border-bottom: none; }
-.gen-inv-item:hover { background: rgba(255,255,255,0.05); color: var(--gold); }
+.gen-inv-item:hover { background: rgba(0,0,0,0.06); color: var(--gold); }
 .gen-inv-item.gen-inv-disabled {
   color: var(--text-muted);
   cursor: not-allowed;
   font-style: italic;
 }
 .gen-inv-lock { font-size: 10px; }
+
+/* Themed form control — used in modal dialogs */
+.form-control {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15.6px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.form-control option { background: var(--surface); color: var(--text); }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 
 /* Void banner */
 .void-banner {
@@ -979,6 +1008,7 @@ body[data-theme="light"] .status-paid {
 body[data-theme="light"] ::-webkit-scrollbar-track { background: #f0f0f0; }
 body[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cccccc; }
 body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; }
+body[data-theme="light"] .form-control { border-color: #cccccc; }
 
 /* ===== SENT LOG ===== */
 .sent-log-item {
