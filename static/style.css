@@ -380,6 +380,113 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
 }
 
+/* ===== CUSTOM DATE PICKER ===== */
+.qpicker { position: relative; display: block; }
+
+/* Original <input type="date"> stays in the DOM for form submission;
+   hidden visually so the native OS calendar never appears. */
+.qpicker-real {
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+
+.qpicker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.qpicker-trigger:focus { outline: none; border-color: var(--gold); }
+.qpicker-trigger[aria-expanded="true"] { border-color: var(--gold); }
+
+.qpicker-val { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qpicker-val.is-placeholder { color: var(--text-muted); }
+.qpicker-icon { flex-shrink: 0; color: var(--text-muted); }
+
+/* Popup — appended to <body> with position:fixed so overflow:hidden parents don't clip it */
+.qpicker-pop {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  min-width: 272px;
+  box-shadow: 0 8px 36px rgba(0,0,0,0.32);
+}
+.qpicker-pop.is-open { display: block; }
+
+.qpicker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 4px;
+}
+
+.qpicker-arrow,
+.qpicker-heading {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: 'DM Sans', sans-serif;
+  transition: background 0.12s, color 0.12s;
+}
+.qpicker-arrow { font-size: 20px; line-height: 1; padding: 2px 6px; }
+.qpicker-heading { font-size: 14px; font-weight: 600; padding: 4px 8px; flex: 1; text-align: center; }
+.qpicker-arrow:hover,
+.qpicker-heading:hover { background: rgba(144,70,214,0.1); color: var(--gold); }
+
+.qpicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.qpicker-dow {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 5px 0;
+}
+
+.qpicker-blank { display: block; }
+
+.qpicker-day {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  padding: 5px 2px;
+  text-align: center;
+  width: 100%;
+  transition: background 0.1s, color 0.1s;
+}
+.qpicker-day:hover:not(:disabled) { background: rgba(144,70,214,0.12); color: var(--gold); }
+.qpicker-day.is-today { border: 1px solid var(--gold); color: var(--gold); }
+.qpicker-day.is-selected { background: var(--gold); color: #fff; font-weight: 600; }
+.qpicker-day.is-today.is-selected { color: #fff; }
+
+/* Light-mode surface for popup (surface var already overridden in [data-theme=light]) */
+body[data-theme="light"] .qpicker-pop {
+  box-shadow: 0 8px 36px rgba(0,0,0,0.14);
+}
+
 /* ===== CUSTOM CHECKBOXES ===== */
 input[type="checkbox"] {
   appearance: none;
