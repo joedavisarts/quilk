@@ -228,9 +228,8 @@
       {% if doc.voided %}Un-void{% else %}Void{% endif %}
     </button>
 
-    <form method="POST" action="{{ url_for('delete_document', doc_id=doc.id) }}" style="display:inline"
-          onsubmit="return confirm('Delete this document? This cannot be undone.')">
-      <button type="submit" class="btn btn-danger">Delete</button>
+    <form method="POST" action="{{ url_for('discard_document', doc_id=doc.id) }}" style="display:inline">
+      <button type="submit" class="btn btn-outline" style="border-color:#888;color:#888;">Discard</button>
     </form>
 
     {% if doc.job_id and other_jobs %}

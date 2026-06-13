@@ -54,79 +54,32 @@
   </div>
 </div>
 
-{# ── Delete job modal ──────────────────────────────────────────────────── #}
-<div class="modal-overlay hidden" id="delete-job-modal" role="dialog" aria-modal="true">
-  <div class="modal-card" style="max-width:480px;padding:0;">
+{# ── Discard job confirmation modal ────────────────────────────────────── #}
+{% if job_meta %}
+<div class="modal-overlay hidden" id="discard-job-modal" role="dialog" aria-modal="true">
+  <div class="modal-card" style="max-width:440px;padding:0;">
     <div class="modal-header">
-      <h3 id="del-modal-title">Delete Job?</h3>
-      <button type="button" class="modal-close" onclick="closeDeleteJobModal()" aria-label="Close">&times;</button>
+      <h3>Discard Job?</h3>
+      <button type="button" class="modal-close"
+              onclick="document.getElementById('discard-job-modal').classList.add('hidden')"
+              aria-label="Close">&times;</button>
     </div>
-
-    <!-- Step 1: consequences -->
-    <div id="del-step-1" style="padding:24px 28px 20px;">
-      <div style="padding:14px 16px;border-radius:8px;background:rgba(220,50,50,0.1);border:1px solid rgba(220,50,50,0.25);margin-bottom:18px;">
-        <p style="font-weight:600;color:#e05;margin-bottom:6px;">This cannot be undone.</p>
-        <p style="font-size:13.5px;line-height:1.5;">
-          Deleting this job will permanently remove it and all its documents:
-          {% if docs %}
-          <ul style="margin:8px 0 0 18px;padding:0;">
-            {% for d in docs %}
-            <li style="font-size:12.5px;color:var(--text-muted);">{{ d.doc_number }} ({{ d.doc_type }})</li>
-            {% endfor %}
-          </ul>
-          {% else %}
-          <span style="color:var(--text-muted);">No documents.</span>
-          {% endif %}
-        </p>
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeDeleteJobModal()">Cancel</button>
-        <button type="button" class="btn btn-outline"
-                onclick="closeDeleteJobModal(); document.getElementById('edit-title-modal').classList.remove('hidden')">
-          Edit Job Instead
-        </button>
-        <button type="button" class="btn btn-danger" onclick="goDelStep(2)">Continue →</button>
-      </div>
-    </div>
-
-    <!-- Step 2: export offer -->
-    <div id="del-step-2" class="hidden" style="padding:24px 28px 20px;">
-      <p style="margin-bottom:16px;font-size:14px;">Optionally export a backup of this job before deleting. The download opens in the background.</p>
-      <div style="display:flex;gap:10px;margin-bottom:10px;">
-        <form method="POST" action="{{ url_for('export_selection_jobs_csv') }}" target="_blank" id="single-export-csv-form" style="display:inline;">
-          <input type="hidden" name="job_ids" value="{{ job_id }}">
-          <button type="submit" class="btn btn-outline" onclick="onSingleExport()">↓ Download CSV</button>
-        </form>
-        <form method="POST" action="{{ url_for('export_selection_jobs') }}" target="_blank" id="single-export-quilk-form" style="display:inline;">
-          <input type="hidden" name="job_ids" value="{{ job_id }}">
-          <button type="submit" class="btn btn-outline" onclick="onSingleExport()">↓ Download .quilk</button>
-        </form>
-      </div>
-      <p id="del-export-done" class="hidden"
-         style="font-size:12.5px;color:var(--gold);margin-top:2px;">
-        ✓ Download started — continue when ready.
+    <div style="padding:24px 28px 20px;">
+      <p style="font-size:14px;line-height:1.6;margin-bottom:18px;">
+        This will discard the job and all its documents. They'll move to the
+        <strong>Discarded</strong> area in the sidebar and can be restored at any time.
       </p>
-      <div class="form-actions" style="margin-top:18px;">
-        <button type="button" class="btn btn-outline" onclick="goDelStep(1)">← Back</button>
-        <button type="button" id="del-skip-btn" class="btn btn-danger" onclick="goDelStep(3)">Skip →</button>
-      </div>
-    </div>
-
-    <!-- Step 3: type DELETE -->
-    <div id="del-step-3" class="hidden" style="padding:24px 28px 20px;">
-      <p style="margin-bottom:12px;font-size:14px;">Type <strong>DELETE</strong> to permanently remove this job and all its documents.</p>
-      <input type="text" id="del-confirm-input" class="form-control"
-             placeholder="Type DELETE here" oninput="updateDelConfirmBtn()"
-             autocomplete="off" spellcheck="false" />
-      <div class="form-actions" style="margin-top:16px;">
-        <button type="button" class="btn btn-outline" onclick="closeDeleteJobModal()">Cancel</button>
-        <form method="POST" action="{{ url_for('delete_job', job_id=job_id) }}" id="delete-job-form" style="display:inline;">
-          <button type="submit" id="del-confirm-btn" class="btn btn-danger" disabled>Delete Job</button>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline"
+                onclick="document.getElementById('discard-job-modal').classList.add('hidden')">Cancel</button>
+        <form method="POST" action="{{ url_for('discard_job', job_id=job_id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-outline" style="border-color:#888;color:#888;">Discard Job</button>
         </form>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
 
 {# ── Page header ───────────────────────────────────────────────────────── #}
 <div class="page-header">
@@ -146,7 +99,8 @@
     {% endif %}
     {% if job_meta %}
     <button type="button" class="btn btn-outline" onclick="openEditTitle()">Edit Title</button>
-    <button type="button" class="btn btn-danger" onclick="openDeleteJobModal()">Delete Job</button>
+    <button type="button" class="btn btn-outline" style="border-color:#888;color:#888;"
+            onclick="document.getElementById('discard-job-modal').classList.remove('hidden')">Discard Job</button>
     {% endif %}
   </div>
 </div>
@@ -282,43 +236,9 @@ document.getElementById('edit-title-modal')?.addEventListener('click', function(
   if (e.target === this) this.classList.add('hidden');
 });
 
-// ---- Delete job modal ----
-let _delModalTitle = 'Delete Job?';
-
-function openDeleteJobModal() {
-  document.getElementById('del-confirm-input').value = '';
-  updateDelConfirmBtn();
-  document.getElementById('del-export-done').classList.add('hidden');
-  document.getElementById('del-skip-btn').textContent = 'Skip →';
-  goDelStep(1);
-  document.getElementById('delete-job-modal').classList.remove('hidden');
-}
-
-function closeDeleteJobModal() {
-  document.getElementById('delete-job-modal').classList.add('hidden');
-}
-
-function goDelStep(n) {
-  [1, 2, 3].forEach(i =>
-    document.getElementById(`del-step-${i}`).classList.toggle('hidden', i !== n)
-  );
-  if (n === 2) document.getElementById('del-modal-title').textContent = 'Export before deleting?';
-  else document.getElementById('del-modal-title').textContent = _delModalTitle;
-  if (n === 3) setTimeout(() => document.getElementById('del-confirm-input').focus(), 50);
-}
-
-function onSingleExport() {
-  document.getElementById('del-export-done').classList.remove('hidden');
-  document.getElementById('del-skip-btn').textContent = 'Continue →';
-}
-
-function updateDelConfirmBtn() {
-  const val = (document.getElementById('del-confirm-input')?.value || '');
-  document.getElementById('del-confirm-btn').disabled = val !== 'DELETE';
-}
-
-document.getElementById('delete-job-modal')?.addEventListener('click', function(e) {
-  if (e.target === this) closeDeleteJobModal();
+// ---- Discard job modal ----
+document.getElementById('discard-job-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) this.classList.add('hidden');
 });
 
 // ---- Reassign modal ----

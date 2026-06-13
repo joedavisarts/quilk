@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Discarded — Quilk{% endblock %}
+{% block content %}
+
+{# ── Permanent-delete modal (3-step, shared for jobs and docs) ──────────── #}
+<div class="modal-overlay hidden" id="perm-del-modal" role="dialog" aria-modal="true">
+  <div class="modal-card" style="max-width:500px;padding:0;">
+    <div class="modal-header">
+      <h3 id="pdm-title">Delete Permanently?</h3>
+      <button type="button" class="modal-close" onclick="closePDM()" aria-label="Close">&times;</button>
+    </div>
+
+    {# Step 1: consequences #}
+    <div id="pdm-step-1" style="padding:24px 28px 20px;">
+      <div style="padding:14px 16px;border-radius:8px;background:rgba(220,50,50,0.08);border:1px solid rgba(220,50,50,0.22);margin-bottom:18px;">
+        <p style="font-weight:600;color:#e05;margin-bottom:6px;">This cannot be undone.</p>
+        <p id="pdm-consequences" style="font-size:13.5px;line-height:1.5;color:var(--text-muted);"></p>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closePDM()">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="pdmGoStep(2)">Continue →</button>
+      </div>
+    </div>
+
+    {# Step 2: export offer #}
+    <div id="pdm-step-2" class="hidden" style="padding:24px 28px 20px;">
+      <p style="margin-bottom:16px;font-size:14px;">
+        Optionally export a backup before permanently deleting. The download opens in the background.
+      </p>
+      <div id="pdm-export-btns" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;"></div>
+      <p id="pdm-export-done" class="hidden"
+         style="font-size:12.5px;color:var(--gold);margin-top:4px;">✓ Download started — continue when ready.</p>
+      <div class="form-actions" style="margin-top:18px;">
+        <button type="button" class="btn btn-outline" onclick="pdmGoStep(1)">← Back</button>
+        <button type="button" id="pdm-skip-btn" class="btn btn-danger" onclick="pdmGoStep(3)">Skip →</button>
+      </div>
+    </div>
+
+    {# Step 3: type DELETE #}
+    <div id="pdm-step-3" class="hidden" style="padding:24px 28px 20px;">
+      <p style="margin-bottom:12px;font-size:14px;">
+        Type <strong>DELETE</strong> to permanently remove this item. This cannot be undone.
+      </p>
+      <input type="text" id="pdm-confirm-input" class="form-control"
+             placeholder="Type DELETE here" oninput="pdmUpdateBtn()"
+             autocomplete="off" spellcheck="false" />
+      <div class="form-actions" style="margin-top:16px;">
+        <button type="button" class="btn btn-outline" onclick="closePDM()">Cancel</button>
+        <form id="pdm-form" method="POST" action="" style="display:inline;">
+          <button type="submit" id="pdm-confirm-btn" class="btn btn-danger" disabled>
+            Delete Permanently
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Page ───────────────────────────────────────────────────────────────── #}
+<div class="page-header">
+  <div>
+    <h1>Discarded</h1>
+    <span class="page-sub">Items here are hidden from the active app. Restore to bring them back, or Delete Permanently to remove them forever.</span>
+  </div>
+</div>
+
+{% if not discarded_jobs and not discarded_docs %}
+<div class="form-card full-width" style="text-align:center;padding:48px 24px;">
+  <svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:var(--text-dim);margin-bottom:14px;">
+    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+  </svg>
+  <p style="color:var(--text-muted);font-size:15px;">Nothing discarded — your trash is empty.</p>
+</div>
+
+{% else %}
+
+{# ── Discarded Jobs ────────────────────────────────────────────────────── #}
+{% if discarded_jobs %}
+<div class="form-card full-width" style="margin-bottom:20px;">
+  <h2 class="card-title">Discarded Jobs</h2>
+  <ul class="job-doc-list">
+    {% for j in discarded_jobs %}
+    <li class="job-doc-item">
+      <div class="job-doc-top">
+        <span class="job-doc-num" style="color:var(--text);font-family:monospace;">
+          {{ j.job_title or j.job_number }}
+        </span>
+        {% if j.job_title %}
+        <span style="font-size:12px;color:var(--text-muted);">{{ j.job_number }}</span>
+        {% endif %}
+      </div>
+      <div class="job-doc-bottom">
+        <span class="job-doc-date">{{ j.doc_count }} document{{ 's' if j.doc_count != 1 }}</span>
+        {% if j.discarded_at %}
+        <span class="job-doc-date">discarded {{ j.discarded_at[:10] }}</span>
+        {% endif %}
+        <form method="POST" action="{{ url_for('restore_job', job_id=j.job_id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-xs btn-outline">Restore</button>
+        </form>
+        <button type="button" class="btn btn-xs btn-danger"
+                onclick="openPDMJob('{{ j.job_id }}', '{{ (j.job_title or j.job_number)|e }}', {{ j.doc_count }})">
+          Delete Permanently
+        </button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# ── Discarded Documents ───────────────────────────────────────────────── #}
+{% if discarded_docs %}
+<div class="form-card full-width">
+  <h2 class="card-title">Discarded Documents</h2>
+  <ul class="job-doc-list">
+    {% for d in discarded_docs %}
+    <li class="job-doc-item">
+      <div class="job-doc-top">
+        <span class="job-doc-num">{{ d.doc_number }}</span>
+        <span class="badge badge-{{ d.doc_type }}">
+          {% if d.invoice_type == 'deposit' %}deposit inv
+          {% elif d.invoice_type == 'balance' %}balance inv
+          {% elif d.invoice_type == 'full' %}full inv
+          {% else %}{{ d.doc_type }}{% endif %}
+        </span>
+      </div>
+      <div class="job-doc-bottom">
+        {% if d.client_name %}
+        <span class="job-doc-date">{{ d.client_name }}</span>
+        {% endif %}
+        <span class="status status-{{ d.status }}" style="font-size:11.5px;padding:1px 7px;">{{ d.status }}</span>
+        {% if d.discarded_at %}
+        <span class="job-doc-date">discarded {{ d.discarded_at[:10] }}</span>
+        {% endif %}
+        <form method="POST" action="{{ url_for('restore_document', doc_id=d.id) }}" style="display:inline;">
+          <button type="submit" class="btn btn-xs btn-outline">Restore</button>
+        </form>
+        <button type="button" class="btn btn-xs btn-danger"
+                onclick="openPDMDoc({{ d.id }}, '{{ d.doc_number|e }}', '{{ (d.client_name or '')|e }}')">
+          Delete Permanently
+        </button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Permanent-delete modal helpers ────────────────────────────────────────────
+
+function pdmGoStep(n) {
+  [1, 2, 3].forEach(function(i) {
+    document.getElementById('pdm-step-' + i).classList.toggle('hidden', i !== n);
+  });
+  if (n === 3) setTimeout(function() { document.getElementById('pdm-confirm-input').focus(); }, 50);
+}
+
+function pdmUpdateBtn() {
+  document.getElementById('pdm-confirm-btn').disabled =
+    document.getElementById('pdm-confirm-input').value !== 'DELETE';
+}
+
+function closePDM() {
+  document.getElementById('perm-del-modal').classList.add('hidden');
+  document.getElementById('pdm-confirm-input').value = '';
+  pdmUpdateBtn();
+  document.getElementById('pdm-export-done').classList.add('hidden');
+  document.getElementById('pdm-skip-btn').textContent = 'Skip →';
+}
+
+function openPDM(deleteUrl, title, consequencesHtml, exportBtnsHtml) {
+  document.getElementById('pdm-title').textContent = title;
+  document.getElementById('pdm-consequences').innerHTML = consequencesHtml;
+  document.getElementById('pdm-export-btns').innerHTML = exportBtnsHtml;
+  document.getElementById('pdm-form').action = deleteUrl;
+  document.getElementById('pdm-confirm-input').value = '';
+  pdmUpdateBtn();
+  pdmGoStep(1);
+  document.getElementById('perm-del-modal').classList.remove('hidden');
+}
+
+function openPDMJob(jobId, jobLabel, docCount) {
+  var consequences = 'Permanently delete job <strong>' + jobLabel + '</strong> and all ' +
+    docCount + ' of its document' + (docCount === 1 ? '' : 's') + '. There is no undo.';
+  var exportBtns =
+    '<form method="POST" action="/jobs/export_selection_csv" target="_blank" style="display:inline" onsubmit="onPDMExport()">' +
+      '<input type="hidden" name="job_ids" value="' + jobId + '">' +
+      '<button type="submit" class="btn btn-outline">↓ CSV</button>' +
+    '</form>' +
+    '<form method="POST" action="/jobs/export_selection" target="_blank" style="display:inline" onsubmit="onPDMExport()">' +
+      '<input type="hidden" name="job_ids" value="' + jobId + '">' +
+      '<button type="submit" class="btn btn-outline">↓ .quilk</button>' +
+    '</form>';
+  openPDM('/jobs/' + jobId + '/delete', 'Delete Job Permanently', consequences, exportBtns);
+}
+
+function openPDMDoc(docId, docNumber, clientName) {
+  var who = clientName ? (' for ' + clientName) : '';
+  var consequences = 'Permanently delete document <strong>' + docNumber + '</strong>' + who + '. There is no undo.';
+  var exportBtns =
+    '<form method="POST" action="/documents/export_selection" target="_blank" style="display:inline" onsubmit="onPDMExport()">' +
+      '<input type="hidden" name="doc_ids" value="' + docId + '">' +
+      '<button type="submit" class="btn btn-outline">↓ .quilk backup</button>' +
+    '</form>';
+  openPDM('/documents/' + docId + '/delete', 'Delete Document Permanently', consequences, exportBtns);
+}
+
+function onPDMExport() {
+  document.getElementById('pdm-export-done').classList.remove('hidden');
+  document.getElementById('pdm-skip-btn').textContent = 'Continue →';
+}
+
+// Close on overlay click
+document.getElementById('perm-del-modal').addEventListener('click', function(e) {
+  if (e.target === this) closePDM();
+});
+</script>
+{% endblock %}

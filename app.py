@@ -649,7 +649,7 @@ def dashboard():
         db.execute(
             "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
             " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT 10",
+            " WHERE d.user_id=? AND d.discarded=0 ORDER BY d.created_at DESC LIMIT 10",
             (current_user.id,),
         ).fetchall()
     )
@@ -661,7 +661,7 @@ def dashboard():
     counts = {}
     for dt in ('invoice', 'quote', 'receipt'):
         row = db.execute(
-            "SELECT COUNT(*) AS n FROM documents WHERE doc_type=? AND user_id=?",
+            "SELECT COUNT(*) AS n FROM documents WHERE doc_type=? AND user_id=? AND discarded=0",
             (dt, current_user.id),
         ).fetchone()
         counts[dt] = row['n']
@@ -834,7 +834,8 @@ def search_documents():
         rows = _rows_to_list(db.execute(
             "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
             " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? AND (d.doc_number LIKE ? OR c.name LIKE ? OR c.company_name LIKE ?)"
+            " WHERE d.user_id=? AND d.discarded=0"
+            " AND (d.doc_number LIKE ? OR c.name LIKE ? OR c.company_name LIKE ?)"
             " ORDER BY d.created_at DESC LIMIT 50",
             (current_user.id, f'%{q}%', f'%{q}%', f'%{q}%'),
         ).fetchall())
@@ -842,7 +843,7 @@ def search_documents():
         rows = _rows_to_list(db.execute(
             "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
             " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT 50",
+            " WHERE d.user_id=? AND d.discarded=0 ORDER BY d.created_at DESC LIMIT 50",
             (current_user.id,),
         ).fetchall())
 
@@ -1087,19 +1088,19 @@ def jobs():
     # Get job metadata from jobs table (ordered newest first)
     job_meta_rows = _rows_to_list(db.execute(
         "SELECT j.id, j.job_id, j.job_number, j.job_title, j.created_at"
-        " FROM jobs j WHERE j.user_id=? ORDER BY j.created_at DESC",
+        " FROM jobs j WHERE j.user_id=? AND j.discarded=0 ORDER BY j.created_at DESC",
         (current_user.id,),
     ).fetchall())
     job_meta_map = {j['job_id']: j for j in job_meta_rows}
 
-    # Get all documents grouped by job_id
+    # Get all active (non-discarded) documents grouped by job_id
     rows = _rows_to_list(db.execute(
         "SELECT d.id, d.job_id, d.doc_type, d.doc_number, d.status, d.voided,"
         " d.invoice_type, d.amount_due, d.paid_amount, d.subtotal, d.discount,"
         " d.tax_amount, d.source_document_id, d.created_at, d.pay_by_date,"
         " d.client_id, d.currency"
         " FROM documents d"
-        " WHERE d.user_id=? AND d.job_id IS NOT NULL"
+        " WHERE d.user_id=? AND d.job_id IS NOT NULL AND d.discarded=0"
         " ORDER BY d.created_at ASC",
         (current_user.id,),
     ).fetchall())
@@ -1188,7 +1189,7 @@ def job_detail(job_id):
         "SELECT d.*,"
         " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
         " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
-        " WHERE d.job_id=? AND d.user_id=?"
+        " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0"
         " ORDER BY d.created_at ASC",
         (job_id, current_user.id),
     ).fetchall())
@@ -1251,7 +1252,8 @@ def documents():
     status = request.args.get('status', '')
     query = (
         "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        " FROM documents d LEFT JOIN clients c ON d.client_id = c.id WHERE d.user_id=?"
+        " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
+        " WHERE d.user_id=? AND d.discarded=0"
     )
     params = [current_user.id]
     if doc_type:
@@ -1416,7 +1418,8 @@ def document_view(doc_id):
             " d.pay_by_date,"
             " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
             " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
-            " WHERE d.job_id=? AND d.user_id=? ORDER BY d.created_at",
+            " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0"
+            " ORDER BY d.created_at",
             (job_id, current_user.id),
         ).fetchall())
         for jd in job_docs:
@@ -1695,11 +1698,21 @@ def bulk_delete_documents():
 
 
 @app.route('/documents/<int:doc_id>/delete', methods=['POST'])
+@login_required
 def delete_document(doc_id):
+    """Permanent hard-delete — only allowed on already-discarded documents."""
     db = get_db()
+    row = db.execute(
+        "SELECT id FROM documents WHERE id=? AND user_id=? AND discarded=1",
+        (doc_id, current_user.id),
+    ).fetchone()
+    if not row:
+        db.close()
+        abort(404)
     db.execute("DELETE FROM sent_log WHERE doc_id=?", (doc_id,))
     db.execute(
-        "UPDATE documents SET source_document_id=NULL WHERE source_document_id=? AND user_id=?",
+        "UPDATE documents SET source_document_id=NULL"
+        " WHERE source_document_id=? AND user_id=?",
         (doc_id, current_user.id),
     )
     db.execute(
@@ -1707,7 +1720,8 @@ def delete_document(doc_id):
     )
     db.commit()
     db.close()
-    return redirect(url_for('documents'))
+    flash('Document permanently deleted.', 'success')
+    return redirect(url_for('discarded_items'))
 
 
 @app.route('/documents/export_csv')
@@ -2222,7 +2236,15 @@ def edit_job_title(job_id):
 @app.route('/jobs/<job_id>/delete', methods=['POST'])
 @login_required
 def delete_job(job_id):
+    """Permanent hard-delete — only allowed on already-discarded jobs."""
     db = get_db()
+    job_row = db.execute(
+        "SELECT job_id FROM jobs WHERE job_id=? AND user_id=? AND discarded=1",
+        (job_id, current_user.id),
+    ).fetchone()
+    if not job_row:
+        db.close()
+        abort(404)
     doc_ids = [r['id'] for r in db.execute(
         "SELECT id FROM documents WHERE job_id=? AND user_id=?",
         (job_id, current_user.id),
@@ -2242,8 +2264,8 @@ def delete_job(job_id):
     db.execute("DELETE FROM jobs WHERE job_id=? AND user_id=?", (job_id, current_user.id))
     db.commit()
     db.close()
-    flash('Job deleted.', 'success')
-    return redirect(url_for('jobs'))
+    flash('Job permanently deleted.', 'success')
+    return redirect(url_for('discarded_items'))
 
 
 @app.route('/jobs/bulk_delete', methods=['POST'])
@@ -2371,6 +2393,138 @@ def export_selection_jobs_csv():
     buf.seek(0)
     return send_file(buf, mimetype='text/csv', as_attachment=True,
                      download_name=f"jobs_{date.today().isoformat()}.csv")
+
+
+# ---------------------------------------------------------------------------
+# Discard / Restore / Discarded page
+# ---------------------------------------------------------------------------
+
+@app.route('/documents/<int:doc_id>/discard', methods=['POST'])
+@login_required
+def discard_document(doc_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT id FROM documents WHERE id=? AND user_id=? AND discarded=0",
+        (doc_id, current_user.id),
+    ).fetchone()
+    if not row:
+        db.close()
+        abort(404)
+    from datetime import datetime as _dt
+    now = _dt.utcnow().isoformat()
+    db.execute(
+        "UPDATE documents SET discarded=1, discarded_at=? WHERE id=? AND user_id=?",
+        (now, doc_id, current_user.id),
+    )
+    db.commit()
+    db.close()
+    flash(
+        'Document discarded. You can find it under Discarded in the sidebar. '
+        'To permanently delete, use Delete Permanently from the Discarded page.',
+        'info',
+    )
+    return redirect(url_for('documents'))
+
+
+@app.route('/jobs/<job_id>/discard', methods=['POST'])
+@login_required
+def discard_job(job_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT job_id FROM jobs WHERE job_id=? AND user_id=? AND discarded=0",
+        (job_id, current_user.id),
+    ).fetchone()
+    if not row:
+        db.close()
+        abort(404)
+    from datetime import datetime as _dt
+    now = _dt.utcnow().isoformat()
+    db.execute(
+        "UPDATE jobs SET discarded=1, discarded_at=? WHERE job_id=? AND user_id=?",
+        (now, job_id, current_user.id),
+    )
+    # Cascade: mark all active docs in this job as discarded-with-job
+    db.execute(
+        "UPDATE documents SET discarded=1, discarded_at=?, discarded_with_job=1"
+        " WHERE job_id=? AND user_id=? AND discarded=0",
+        (now, job_id, current_user.id),
+    )
+    db.commit()
+    db.close()
+    flash(
+        'Job discarded (including its documents). You can find it under Discarded in the sidebar. '
+        'To permanently delete, use Delete Permanently from the Discarded page.',
+        'info',
+    )
+    return redirect(url_for('jobs'))
+
+
+@app.route('/documents/<int:doc_id>/restore', methods=['POST'])
+@login_required
+def restore_document(doc_id):
+    db = get_db()
+    db.execute(
+        "UPDATE documents SET discarded=0, discarded_at=NULL, discarded_with_job=0"
+        " WHERE id=? AND user_id=?",
+        (doc_id, current_user.id),
+    )
+    db.commit()
+    db.close()
+    flash('Document restored to the active list.', 'success')
+    return redirect(url_for('discarded_items'))
+
+
+@app.route('/jobs/<job_id>/restore', methods=['POST'])
+@login_required
+def restore_job(job_id):
+    db = get_db()
+    db.execute(
+        "UPDATE jobs SET discarded=0, discarded_at=NULL WHERE job_id=? AND user_id=?",
+        (job_id, current_user.id),
+    )
+    # Cascade-restore only docs that were discarded as part of this job discard
+    db.execute(
+        "UPDATE documents SET discarded=0, discarded_at=NULL, discarded_with_job=0"
+        " WHERE job_id=? AND user_id=? AND discarded_with_job=1",
+        (job_id, current_user.id),
+    )
+    db.commit()
+    db.close()
+    flash('Job and its documents restored to the active lists.', 'success')
+    return redirect(url_for('discarded_items'))
+
+
+@app.route('/discarded')
+@login_required
+def discarded_items():
+    db = get_db()
+
+    # Discarded jobs (with cascade-discarded doc count)
+    discarded_jobs = _rows_to_list(db.execute(
+        "SELECT j.job_id, j.job_number, j.job_title, j.discarded_at,"
+        " COUNT(d.id) AS doc_count"
+        " FROM jobs j"
+        " LEFT JOIN documents d ON d.job_id=j.job_id AND d.discarded_with_job=1"
+        " WHERE j.user_id=? AND j.discarded=1"
+        " GROUP BY j.job_id ORDER BY j.discarded_at DESC",
+        (current_user.id,),
+    ).fetchall())
+
+    # Discarded documents NOT cascade-discarded with a job (individually discarded)
+    discarded_docs = _rows_to_list(db.execute(
+        "SELECT d.id, d.doc_number, d.doc_type, d.invoice_type, d.status,"
+        " d.discarded_at, d.job_id,"
+        " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
+        " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
+        " WHERE d.user_id=? AND d.discarded=1 AND d.discarded_with_job=0"
+        " ORDER BY d.discarded_at DESC",
+        (current_user.id,),
+    ).fetchall())
+
+    db.close()
+    return render_template('discarded.html',
+                           discarded_jobs=discarded_jobs,
+                           discarded_docs=discarded_docs)
 
 
 # ---------------------------------------------------------------------------
