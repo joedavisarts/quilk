@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; }
+body { margin: 0; color: #0D0D0B; }
+.paper { width: 100%; background: #fff; }
+.banner { height: 155px; background: linear-gradient(135deg, #1F6660 0%, #143F3B 100%); display: flex; align-items: center; justify-content: center; gap: 55px; padding: 0 40px; }
+.aureum { height: 80px; }
+.vsm { height: 80px; }
+.vdiv { width: 1px; height: 80px; background: rgba(255,255,255,0.28); }
+.body { padding: 38px 48px; }
+.titlerow { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; margin-bottom: 26px; border-bottom: 2px solid #143F3B; }
+.title { font-size: 42px; font-weight: bold; letter-spacing: 2px; }
+.docnum { font-size: 16px; font-weight: bold; color: #143F3B; }
+.meta { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; }
+.label { font-size: 11px; letter-spacing: 2px; font-weight: bold; margin-bottom: 8px; color: #143F3B; }
+.client { font-weight: bold; font-size: 16px; }
+.muted { color: #777; }
+.metaright { text-align: right; line-height: 2; }
+table.items { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 22px; }
+table.items th { background: #0D0D0B; color: #fff; font-size: 11px; letter-spacing: 1px; padding: 11px 14px; text-align: left; }
+th.c, td.c { text-align: center; }
+th.r, td.r { text-align: right; }
+table.items td { padding: 13px 14px; border-bottom: 0.5px solid #eee; }
+.totals { display: flex; justify-content: flex-end; margin-bottom: 26px; }
+.totals table { font-size: 14px; min-width: 300px; }
+.totals td { padding: 5px 0; }
+.totals .bdr { border-bottom: 1px solid #ddd; }
+.due { display: flex; justify-content: space-between; align-items: center; padding: 16px 22px; border-radius: 5px; margin-bottom: 26px; font-weight: bold; font-size: 15px; letter-spacing: 0.5px; background: #143F3B; color: #fff; }
+.due .big { font-size: 22px; }
+.callout { padding: 10px 16px; font-size: 14px; background: #eef4f3; margin-bottom: 18px; border-left: 4px solid #143F3B; }
+.nextpage { font-size: 22px; font-weight: bold; color: #143F3B; margin-bottom: 28px; }
+.footer { display: flex; justify-content: space-between; align-items: flex-end; border-top: 0.5px solid #ddd; padding-top: 14px; font-size: 12px; color: #888; }
+.bizname { font-size: 14px; font-weight: bold; color: #143F3B; margin-bottom: 5px; }
+.tiny { font-size: 10px; }
+.thanks { color: #143F3B; font-weight: 600; }
+.paytitle { font-size: 26px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; }
+.section { font-size: 13px; letter-spacing: 2px; font-weight: bold; color: #143F3B; border-bottom: 0.5px solid #ddd; padding-bottom: 6px; margin: 22px 0 18px; }
+.banks { display: flex; gap: 48px; }
+.bank { flex: 1; }
+.bankname { font-weight: bold; font-size: 15px; margin-bottom: 8px; }
+.bankrow { font-size: 13px; line-height: 1.9; }
+.bankrow span { color: #777; }
+.zelle { margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="paper">
+  <div class="banner">
+    {% if aureum_logo_b64 %}<img class="aureum" src="{{ aureum_logo_b64 }}" />{% endif %}
+    <div class="vdiv"></div>
+    {% if vsm_logo_b64 %}<img class="vsm" src="{{ vsm_logo_b64 }}" />{% endif %}
+  </div>
+  <div class="body">
+
+    <div class="titlerow">
+      <div class="title">{{ doc_title }}</div>
+      <div class="docnum">{{ doc.doc_number }}</div>
+    </div>
+
+    <div class="meta">
+      <div>
+        <div class="label">BILL TO</div>
+        {% if client.company_name %}
+          <div class="client">{{ client.company_name }}</div>
+          {% if client.name %}<div class="muted">{{ client.name }}</div>{% endif %}
+        {% else %}
+          <div class="client">{{ client.name or '' }}</div>
+        {% endif %}
+        {% if client.email %}<div class="muted">{{ client.email }}</div>{% endif %}
+        {% if client.phone %}<div class="muted">{{ client.phone }}</div>{% endif %}
+        {% if client.address_line1 %}<div class="muted">{{ client.address_line1 }}</div>{% endif %}
+        {% if client.address_line2 %}<div class="muted">{{ client.address_line2 }}</div>{% endif %}
+        {% if client.city or client.country %}
+          <div class="muted">{{ client.city or '' }}{% if client.city and client.country %}, {% endif %}{{ client.country or '' }}</div>
+        {% endif %}
+      </div>
+      <div class="metaright">
+        <div><span class="muted">Date Issued:</span> <b>{{ doc.date_issued }}</b></div>
+        {% if doc.pay_by_date %}
+        <div><span class="muted">Due Date:</span> <b>{{ doc.pay_by_date }}</b></div>
+        {% endif %}
+        <div><span class="muted">Currency:</span> <b>{{ doc.currency }}</b></div>
+      </div>
+    </div>
+
+    <table class="items">
+      <thead>
+        <tr>
+          <th>DESCRIPTION</th>
+          <th class="c">QTY</th>
+          <th class="r">UNIT PRICE</th>
+          <th class="r">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in doc.line_items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td class="c">{{ item.qty }}</td>
+          <td class="r">{{ item.unit_price | format_currency }}</td>
+          <td class="r">{{ (item.qty * item.unit_price) | format_currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr><td class="muted">Subtotal</td><td class="r">{{ doc.currency }} {{ doc.subtotal | format_currency }}</td></tr>
+        <tr><td class="muted">Discount</td><td class="r">{{ doc.currency }} {{ doc.discount | format_currency }}</td></tr>
+        <tr><td class="muted">Tax</td><td class="r">{{ doc.currency }} {{ doc.tax_amount | format_currency }}</td></tr>
+        {% if doc.doc_type != 'quote' %}
+        <tr><td class="muted bdr">Paid</td><td class="r bdr">{{ doc.currency }} {{ doc.paid_amount | format_currency }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {% if doc.doc_type == 'invoice' %}
+    <div class="due"><span>AMOUNT DUE</span><span class="big">{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+    {% elif doc.doc_type == 'quote' %}
+    <div class="due"><span>TOTAL</span><span class="big">{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+    {% else %}
+    <div class="due"><span>AMOUNT PAID</span><span class="big">{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
+    {% endif %}
+
+    {% if doc.pay_by_date %}
+    <div class="callout"><b>Payment due by:</b> {{ doc.pay_by_date | format_date }}</div>
+    {% endif %}
+
+    {% if user.payment_methods %}
+    <div class="nextpage">Payment details on the following page.</div>
+    {% endif %}
+
+    <div class="footer">
+      <div>
+        <div class="bizname">{{ user.business_name }}</div>
+        {% if user.business_phone or user.business_email %}
+        {{ user.business_phone or '' }}{% if user.business_phone and user.business_email %} &middot; {% endif %}{{ user.business_email or '' }}<br>
+        {% endif %}
+        {% if user.address_line1 %}{{ user.address_line1 }}<br>{% endif %}
+        {% if user.address_line2 %}{{ user.address_line2 }}<br>{% endif %}
+        <span class="tiny">Generated by Quilk &middot; Joe Davis Arts &amp; Media</span>
+      </div>
+      <div class="thanks">Thank you for your business.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- PAGE 2: Methods of Payment -->
+{% if user.payment_methods %}
+<div class="paper" style="page-break-before: always;">
+  <div class="banner">
+    {% if aureum_logo_b64 %}<img class="aureum" src="{{ aureum_logo_b64 }}" />{% endif %}
+    <div class="vdiv"></div>
+    {% if vsm_logo_b64 %}<img class="vsm" src="{{ vsm_logo_b64 }}" />{% endif %}
+  </div>
+  <div class="body">
+    <div class="paytitle">METHODS OF PAYMENT</div>
+
+    {% for group in user.payment_methods %}
+      {% set grp_upper = group.group.upper() %}
+
+      {% if 'ZELLE' in grp_upper %}
+        <div class="section">{{ group.group }}</div>
+        {% for item in group['items'] %}
+        <div class="bankrow zelle"><span>{{ item.label }}:</span> {{ item.details }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="section">{{ group.group }}</div>
+        <div class="banks">
+          {% for item in group['items'] %}
+          {% if 'zelle' not in item.label.lower() %}
+          <div class="bank">
+            <div class="bankname">{{ item.label }}</div>
+            {% for row in item.details | bank_rows %}
+              {% if row[0] %}
+              <div class="bankrow"><span>{{ row[0] }}:</span> {{ row[1] }}</div>
+              {% else %}
+              <div class="bankrow">{{ row[1] }}</div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% for item in group['items'] %}
+        {% if 'zelle' in item.label.lower() %}
+        <div class="section">ZELLE</div>
+        <div class="bankrow zelle"><span>{{ item.label }}:</span> {{ item.details }}</div>
+        {% endif %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+
+    <div class="footer" style="margin-top: 40px;">
+      <div>
+        <div class="bizname">{{ user.business_name }}</div>
+        {% if user.business_phone or user.business_email %}
+        {{ user.business_phone or '' }}{% if user.business_phone and user.business_email %} &middot; {% endif %}{{ user.business_email or '' }}<br>
+        {% endif %}
+        {% if user.address_line1 %}{{ user.address_line1 }}<br>{% endif %}
+        {% if user.address_line2 %}{{ user.address_line2 }}<br>{% endif %}
+        <span class="tiny">Generated by Quilk &middot; Joe Davis Arts &amp; Media</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
+</body>
+</html>

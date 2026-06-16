@@ -43,6 +43,21 @@ def _nl2br(s):
     return str(s).replace('\n', '<br>')
 
 
+def _bank_rows(details_str):
+    """Parse a payment details string into (label, value) tuples for bankrow rendering."""
+    rows = []
+    for line in (details_str or '').split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        if ': ' in line:
+            label, _, value = line.partition(': ')
+            rows.append((label, value))
+        else:
+            rows.append((None, line))
+    return rows
+
+
 def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     doc_type = doc['doc_type']
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
@@ -50,20 +65,31 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     env.filters['format_currency'] = _format_currency
     env.filters['nl2br'] = _nl2br
 
-    template = env.get_template(f'{doc_type}.html')
-
-    # Parse JSON fields so templates get lists, not raw strings
     user_ctx = dict(user)
     user_ctx['payment_methods'] = json.loads(user.get('payment_methods_json') or '[]')
     user_ctx['social_links'] = json.loads(user.get('social_links_json') or '[]')
 
-    html_str = template.render(
-        doc=doc,
-        client=client,
-        logo_b64=_logo_b64_for_file(user.get('logo_filename')),
-        logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
-        user=user_ctx,
-    )
+    if user.get('username') == 'aureum':
+        env.filters['bank_rows'] = _bank_rows
+        template = env.get_template('aureum_doc.html')
+        doc_titles = {'invoice': 'INVOICE', 'quote': 'QUOTE', 'receipt': 'RECEIPT'}
+        html_str = template.render(
+            doc=doc,
+            client=client,
+            user=user_ctx,
+            doc_title=doc_titles.get(doc_type, doc_type.upper()),
+            aureum_logo_b64=_logo_b64_for_file('aureum_luxe_logo.png'),
+            vsm_logo_b64=_logo_b64_for_file('VSMLogoWhite.png'),
+        )
+    else:
+        template = env.get_template(f'{doc_type}.html')
+        html_str = template.render(
+            doc=doc,
+            client=client,
+            logo_b64=_logo_b64_for_file(user.get('logo_filename')),
+            logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
+            user=user_ctx,
+        )
 
     pdf_bytes = io.BytesIO()
     HTML(string=html_str, base_url=ASSETS_DIR).write_pdf(pdf_bytes)
