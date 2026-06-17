@@ -94,18 +94,14 @@ if (lineItemsBody) {
     const subtotal = lineItems.reduce((s, item) => s + item.qty * item.unit_price, 0);
     const discountVal = parseFloat(document.getElementById('discount_val').value) || 0;
     const discountType = document.getElementById('discount_type').value;
-    const taxVal = parseFloat(document.getElementById('tax_val').value) || 0;
-    const taxType = document.getElementById('tax_type').value;
     const paid = parseFloat(document.getElementById('paid_amount').value) || 0;
 
     const discount = discountType === 'percent' ? subtotal * (discountVal / 100) : discountVal;
     const afterDiscount = subtotal - discount;
-    const tax = taxType === 'percent' ? afterDiscount * (taxVal / 100) : taxVal;
-    const due = afterDiscount + tax - paid;
+    const due = afterDiscount - paid;
 
     document.getElementById('t-subtotal').textContent = fmtAmt(subtotal);
     document.getElementById('t-discount').textContent = fmtAmt(discount);
-    document.getElementById('t-tax').textContent = fmtAmt(tax);
     document.getElementById('t-paid').textContent = fmtAmt(paid);
     document.getElementById('t-due').textContent = fmtAmt(due);
   }
@@ -176,7 +172,7 @@ if (lineItemsBody) {
   });
 
   // ── Totals inputs ────────────────────────────────────────────────────────────
-  ['discount_val', 'discount_type', 'tax_val', 'tax_type', 'paid_amount'].forEach(id => {
+  ['discount_val', 'discount_type', 'paid_amount'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', recalc);
   });

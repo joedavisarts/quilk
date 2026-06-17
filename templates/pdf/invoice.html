@@ -70,9 +70,8 @@
     <div class="totals-inner">
       <div class="t-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
       <div class="t-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
-      <div class="t-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
       {% if doc.invoice_type in ('deposit', 'balance') %}
-      {% set project_total = (doc.subtotal or 0) - (doc.discount or 0) + (doc.tax_amount or 0) %}
+      {% set project_total = (doc.subtotal or 0) - (doc.discount or 0) %}
       <div class="t-row"><span>Project Total</span><span>{{ doc.currency }} {{ project_total | format_currency }}</span></div>
       <div class="t-row t-due">
         <span>{% if doc.invoice_type == 'deposit' %}Deposit Due{% else %}Balance Due{% endif %}</span>

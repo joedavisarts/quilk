@@ -124,8 +124,7 @@ def _parse_line_items(raw):
     return raw or []
 
 
-def _compute_totals(line_items, discount_val, discount_type,
-                    tax_val, tax_type, paid_amount):
+def _compute_totals(line_items, discount_val, discount_type, paid_amount):
     subtotal = sum(item.get('qty', 1) * item.get('unit_price', 0)
                    for item in line_items)
 
@@ -135,13 +134,8 @@ def _compute_totals(line_items, discount_val, discount_type,
         discount = discount_val
 
     after_discount = subtotal - discount
-
-    if tax_type == 'percent':
-        tax_amount = after_discount * (tax_val / 100)
-    else:
-        tax_amount = tax_val
-
-    amount_due = after_discount + tax_amount - paid_amount
+    tax_amount = 0
+    amount_due = after_discount - paid_amount
     return subtotal, discount, tax_amount, amount_due
 
 
@@ -706,8 +700,6 @@ def new_document(doc_type):
         line_items = json.loads(data.get('line_items_json', '[]'))
         discount_val = float(data.get('discount_val', 0))
         discount_type = data.get('discount_type', 'flat')
-        tax_val = float(data.get('tax_val', 0))
-        tax_type = data.get('tax_type', 'percent')
         paid_amount = float(data.get('paid_amount', 0))
         currency = data.get('currency', 'USD')
         doc_date = data.get('date_issued') or date.today().isoformat()
@@ -715,7 +707,7 @@ def new_document(doc_type):
         pay_by_date = data.get('pay_by_date') or None
 
         subtotal, discount, tax_amount, amount_due = _compute_totals(
-            line_items, discount_val, discount_type, tax_val, tax_type, paid_amount
+            line_items, discount_val, discount_type, paid_amount
         )
 
         prefix = getattr(current_user, f'doc_prefix_{doc_type}')
@@ -1299,7 +1291,7 @@ def _job_overview(job_docs, anchor):
     if not anchor:
         return None
     currency = anchor.get('currency', 'USD')
-    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0) + (anchor['tax_amount'] or 0)
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     active = [d for d in job_docs if not d.get('voided')]
     voided = [d for d in job_docs if d.get('voided')]
@@ -1561,7 +1553,7 @@ def generate_invoice(doc_id):
         return redirect(url_for('document_view', doc_id=doc_id))
 
     # Compute amounts
-    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0) + (anchor['tax_amount'] or 0)
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     deposit_amount_stored = None
     deposit_type_stored = None
@@ -1776,8 +1768,6 @@ def edit_document(doc_id):
         line_items = json.loads(data.get('line_items_json', '[]'))
         discount_val = float(data.get('discount_val', 0))
         discount_type = data.get('discount_type', 'flat')
-        tax_val = float(data.get('tax_val', 0))
-        tax_type = data.get('tax_type', 'percent')
         paid_amount = float(data.get('paid_amount', 0))
         currency = data.get('currency', 'USD')
         doc_date = data.get('date_issued') or doc['date_issued']
@@ -1786,7 +1776,7 @@ def edit_document(doc_id):
         status = data.get('status', doc['status'])
 
         subtotal, discount, tax_amount, amount_due = _compute_totals(
-            line_items, discount_val, discount_type, tax_val, tax_type, paid_amount
+            line_items, discount_val, discount_type, paid_amount
         )
 
         db.execute(

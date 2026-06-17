@@ -112,19 +112,6 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
             </select>
           </div>
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label>Tax</label>
-            <input type="number" step="0.01" min="0" id="tax_val" name="tax_val" value="{{ doc.tax_amount }}" />
-          </div>
-          <div class="field">
-            <label>Type</label>
-            <select name="tax_type" id="tax_type">
-              <option value="flat" selected>Flat</option>
-              <option value="percent">%</option>
-            </select>
-          </div>
-        </div>
         <div class="field">
           <label>Paid Amount</label>
           <input type="number" step="0.01" min="0" id="paid_amount" name="paid_amount" value="{{ doc.paid_amount }}" />
@@ -133,7 +120,6 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
       <div class="totals-right">
         <div class="total-row"><span>Subtotal</span><span id="t-subtotal">0.00</span></div>
         <div class="total-row"><span>Discount</span><span id="t-discount">0.00</span></div>
-        <div class="total-row"><span>Tax</span><span id="t-tax">0.00</span></div>
         <div class="total-row"><span>Paid</span><span id="t-paid">0.00</span></div>
         <div class="total-row total-due"><span>Amount Due</span><span id="t-due">0.00</span></div>
       </div>

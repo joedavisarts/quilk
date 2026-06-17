@@ -66,7 +66,6 @@
     <div class="totals-inner">
       <div class="t-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
       <div class="t-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.discount | format_currency }}</span></div>
-      <div class="t-row"><span>Tax</span><span>{{ doc.currency }} {{ doc.tax_amount | format_currency }}</span></div>
       <div class="t-row"><span>Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
       <div class="t-row t-due"><span>Amount Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
     </div>

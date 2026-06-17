@@ -114,7 +114,6 @@ table.items td { padding: 13px 14px; border-bottom: 0.5px solid #eee; }
       <table>
         <tr><td class="muted">Subtotal</td><td class="r">{{ doc.currency }} {{ doc.subtotal | format_currency }}</td></tr>
         <tr><td class="muted">Discount</td><td class="r">{{ doc.currency }} {{ doc.discount | format_currency }}</td></tr>
-        <tr><td class="muted">Tax</td><td class="r">{{ doc.currency }} {{ doc.tax_amount | format_currency }}</td></tr>
         {% if doc.doc_type != 'quote' %}
         <tr><td class="muted bdr">Paid</td><td class="r bdr">{{ doc.currency }} {{ doc.paid_amount | format_currency }}</td></tr>
         {% endif %}
