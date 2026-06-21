@@ -26,7 +26,7 @@
   <button type="button" class="btn btn-xs btn-outline" onclick="clearSelection()">Clear</button>
   <button type="button" class="btn btn-xs btn-outline" onclick="exportSelected()">Export .quilk</button>
   <button type="button" class="btn btn-xs btn-outline" onclick="exportSelectedCSV()">Export CSV</button>
-  <button type="button" class="btn btn-xs btn-danger" onclick="openBulkDeleteModal()">Delete Selected</button>
+  <button type="button" class="btn btn-xs btn-warn" onclick="openBulkDiscardModal()">Discard Selected</button>
 </div>
 
 {% if jobs %}
@@ -34,7 +34,7 @@
 
   {# ---- List view ---- #}
   <div class="view-list">
-    <form id="bulk-form" method="POST" action="{{ url_for('bulk_delete_jobs') }}">
+    <form id="bulk-form" method="POST" action="{{ url_for('bulk_discard_jobs') }}">
     <table class="data-table">
       <thead>
         <tr>
@@ -157,54 +157,27 @@
 <form id="modal-export-csv-form"   method="POST" action="{{ url_for('export_selection_jobs_csv') }}" target="_blank" style="display:none;"></form>
 <form id="modal-export-quilk-form" method="POST" action="{{ url_for('export_selection_jobs') }}"     target="_blank" style="display:none;"></form>
 
-<!-- 3-step bulk delete modal -->
-<div class="modal-overlay hidden" id="bulk-delete-modal" role="dialog" aria-modal="true">
+<!-- Bulk discard modal -->
+<div class="modal-overlay hidden" id="bulk-discard-modal" role="dialog" aria-modal="true">
   <div class="modal-card" style="max-width:480px;padding:0;">
     <div class="modal-header">
-      <h3 id="del-modal-title">Delete Jobs?</h3>
-      <button type="button" class="modal-close" onclick="closeBulkDeleteModal()" aria-label="Close">&times;</button>
+      <h3 id="discard-modal-title">Discard Jobs?</h3>
+      <button type="button" class="modal-close" onclick="closeBulkDiscardModal()" aria-label="Close">&times;</button>
     </div>
-
-    <!-- Step 1: consequences -->
-    <div id="del-step-1" style="padding:24px 28px 20px;">
-      <div style="padding:14px 16px;border-radius:8px;background:rgba(220,50,50,0.1);border:1px solid rgba(220,50,50,0.25);margin-bottom:18px;">
-        <p style="font-weight:600;color:#e05;margin-bottom:6px;">This cannot be undone.</p>
-        <p id="del-step1-detail" style="font-size:13.5px;line-height:1.5;"></p>
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeBulkDeleteModal()">Cancel</button>
-        <button type="button" class="btn btn-danger" onclick="goDelStep(2)">Continue →</button>
-      </div>
-    </div>
-
-    <!-- Step 2: export offer -->
-    <div id="del-step-2" class="hidden" style="padding:24px 28px 20px;">
-      <p id="del-step2-msg" style="margin-bottom:16px;font-size:14px;"></p>
-      <div style="display:flex;gap:10px;margin-bottom:10px;">
+    <div style="padding:24px 28px 20px;">
+      <p id="discard-modal-detail" style="margin-bottom:16px;font-size:14px;line-height:1.5;"></p>
+      <div style="display:flex;gap:10px;margin-bottom:6px;">
         <button type="button" class="btn btn-outline" onclick="modalExportCSV()">↓ Download CSV</button>
         <button type="button" class="btn btn-outline" onclick="modalExportQuilk()">↓ Download .quilk</button>
       </div>
-      <p id="del-export-done" class="hidden"
+      <p id="discard-export-done" class="hidden"
          style="font-size:12.5px;color:var(--gold);margin-top:2px;">
-        ✓ Download started — continue when ready.
+        ✓ Download started.
       </p>
       <div class="form-actions" style="margin-top:18px;">
-        <button type="button" class="btn btn-outline" onclick="goDelStep(1)">← Back</button>
-        <button type="button" id="del-skip-btn" class="btn btn-danger" onclick="goDelStep(3)">Skip →</button>
-      </div>
-    </div>
-
-    <!-- Step 3: type DELETE -->
-    <div id="del-step-3" class="hidden" style="padding:24px 28px 20px;">
-      <p style="margin-bottom:12px;font-size:14px;">Type <strong>DELETE</strong> to permanently remove the selected jobs and all their documents.</p>
-      <input type="text" id="del-confirm-input" class="form-control"
-             placeholder="Type DELETE here" oninput="updateDelConfirmBtn()"
-             autocomplete="off" spellcheck="false" />
-      <div class="form-actions" style="margin-top:16px;">
-        <button type="button" class="btn btn-outline" onclick="closeBulkDeleteModal()">Cancel</button>
-        <button type="button" id="del-confirm-btn" class="btn btn-danger"
-                onclick="executeBulkDelete()" disabled>
-          Delete <span id="del-confirm-count"></span>
+        <button type="button" class="btn btn-outline" onclick="closeBulkDiscardModal()">Cancel</button>
+        <button type="button" class="btn btn-warn" onclick="executeBulkDiscard()">
+          Discard <span id="discard-confirm-count"></span>
         </button>
       </div>
     </div>
@@ -308,68 +281,37 @@ function exportSelectedCSV() {
   document.getElementById('export-csv-form').submit();
 }
 
-// ---- 3-step bulk delete ----
-let _delModalTitle = '';
-
-function openBulkDeleteModal() {
+// ---- Bulk discard ----
+function openBulkDiscardModal() {
   if (!selectedIds.size) return;
   const count = selectedIds.size;
   const label = count === 1 ? 'Job' : 'Jobs';
-  _delModalTitle = `Delete ${count} ${label}?`;
-  document.getElementById('del-modal-title').textContent = _delModalTitle;
-
-  document.getElementById('del-step1-detail').textContent =
-    `${count} ${label.toLowerCase()} and all their documents will be permanently removed. ` +
-    `This action cannot be reversed.`;
-
-  document.getElementById('del-step2-msg').textContent =
-    `Optionally export a backup of ${count > 1 ? 'these ' + count + ' jobs' : 'this job'} ` +
-    `before deleting. Downloads open in the background — continue when ready.`;
-
-  document.getElementById('del-confirm-count').textContent = `${count} ${label}`;
-  document.getElementById('del-confirm-input').value = '';
-  updateDelConfirmBtn();
-
-  document.getElementById('del-export-done').classList.add('hidden');
-  document.getElementById('del-skip-btn').textContent = 'Skip →';
-
-  goDelStep(1);
-  document.getElementById('bulk-delete-modal').classList.remove('hidden');
+  document.getElementById('discard-modal-title').textContent = `Discard ${count} ${label}?`;
+  document.getElementById('discard-modal-detail').textContent =
+    `${count} ${label.toLowerCase()} and their documents will be moved to Discarded. ` +
+    `You can restore them later from the Discarded page.`;
+  document.getElementById('discard-confirm-count').textContent = `${count} ${label}`;
+  document.getElementById('discard-export-done').classList.add('hidden');
+  document.getElementById('bulk-discard-modal').classList.remove('hidden');
 }
 
-function closeBulkDeleteModal() {
-  document.getElementById('bulk-delete-modal').classList.add('hidden');
-}
-
-function goDelStep(n) {
-  [1, 2, 3].forEach(i =>
-    document.getElementById(`del-step-${i}`).classList.toggle('hidden', i !== n)
-  );
-  if (n === 2) document.getElementById('del-modal-title').textContent = 'Export before deleting?';
-  else document.getElementById('del-modal-title').textContent = _delModalTitle;
-  if (n === 3) setTimeout(() => document.getElementById('del-confirm-input').focus(), 50);
+function closeBulkDiscardModal() {
+  document.getElementById('bulk-discard-modal').classList.add('hidden');
 }
 
 function modalExportCSV() {
   _injectIds(document.getElementById('modal-export-csv-form'), 'job_ids');
   document.getElementById('modal-export-csv-form').submit();
-  document.getElementById('del-export-done').classList.remove('hidden');
-  document.getElementById('del-skip-btn').textContent = 'Continue →';
+  document.getElementById('discard-export-done').classList.remove('hidden');
 }
 
 function modalExportQuilk() {
   _injectIds(document.getElementById('modal-export-quilk-form'), 'job_ids');
   document.getElementById('modal-export-quilk-form').submit();
-  document.getElementById('del-export-done').classList.remove('hidden');
-  document.getElementById('del-skip-btn').textContent = 'Continue →';
+  document.getElementById('discard-export-done').classList.remove('hidden');
 }
 
-function updateDelConfirmBtn() {
-  const val = (document.getElementById('del-confirm-input')?.value || '');
-  document.getElementById('del-confirm-btn').disabled = val !== 'DELETE';
-}
-
-function executeBulkDelete() {
+function executeBulkDiscard() {
   const form = document.getElementById('bulk-form');
   form.querySelectorAll('input[name="job_ids"]').forEach(i => {
     if (i.type === 'checkbox') i.checked = false;
@@ -383,8 +325,8 @@ function executeBulkDelete() {
   form.submit();
 }
 
-document.getElementById('bulk-delete-modal')?.addEventListener('click', function(e) {
-  if (e.target === this) closeBulkDeleteModal();
+document.getElementById('bulk-discard-modal')?.addEventListener('click', function(e) {
+  if (e.target === this) closeBulkDiscardModal();
 });
 </script>
 {% endblock %}

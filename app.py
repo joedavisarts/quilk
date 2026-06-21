@@ -881,7 +881,7 @@ def clients():
             "SELECT c.*, COUNT(d.id) AS doc_count,"
             " COALESCE(NULLIF(c.company_name,''), c.name) AS display_name"
             " FROM clients c LEFT JOIN documents d ON d.client_id = c.id"
-            " WHERE c.user_id=? GROUP BY c.id"
+            " WHERE c.user_id=? AND c.discarded=0 GROUP BY c.id"
             " ORDER BY COALESCE(NULLIF(c.company_name,''), c.name)",
             (current_user.id,),
         ).fetchall()
@@ -1014,19 +1014,18 @@ def delete_template(client_id, tmpl_id):
     return redirect(url_for('client_detail', client_id=client_id))
 
 
-@app.route('/clients/bulk_delete', methods=['POST'])
-def bulk_delete_clients():
+@app.route('/clients/bulk_discard', methods=['POST'])
+@login_required
+def bulk_discard_clients():
     client_ids = request.form.getlist('client_ids')
     if client_ids:
+        now = datetime.utcnow()
         ph = ','.join('?' * len(client_ids))
         db = get_db()
         db.execute(
-            f"UPDATE documents SET client_id=NULL WHERE client_id IN ({ph}) AND user_id=?",
-            [*client_ids, current_user.id],
-        )
-        db.execute(
-            f"DELETE FROM clients WHERE id IN ({ph}) AND user_id=?",
-            [*client_ids, current_user.id],
+            f"UPDATE clients SET discarded=1, discarded_at=?"
+            f" WHERE id IN ({ph}) AND user_id=? AND discarded=0",
+            [now, *client_ids, current_user.id],
         )
         db.commit()
         db.close()
@@ -1668,21 +1667,18 @@ def void_document(doc_id):
     return redirect(url_for('document_view', doc_id=doc_id))
 
 
-@app.route('/documents/bulk_delete', methods=['POST'])
-def bulk_delete_documents():
+@app.route('/documents/bulk_discard', methods=['POST'])
+@login_required
+def bulk_discard_documents():
     doc_ids = request.form.getlist('doc_ids')
     if doc_ids:
+        now = datetime.utcnow()
         ph = ','.join('?' * len(doc_ids))
         db = get_db()
-        db.execute(f"DELETE FROM sent_log WHERE doc_id IN ({ph})", doc_ids)
         db.execute(
-            f"UPDATE documents SET source_document_id=NULL "
-            f"WHERE source_document_id IN ({ph}) AND user_id=?",
-            [*doc_ids, current_user.id],
-        )
-        db.execute(
-            f"DELETE FROM documents WHERE id IN ({ph}) AND user_id=?",
-            [*doc_ids, current_user.id],
+            f"UPDATE documents SET discarded=1, discarded_at=?"
+            f" WHERE id IN ({ph}) AND user_id=? AND discarded=0",
+            [now, *doc_ids, current_user.id],
         )
         db.commit()
         db.close()
@@ -1695,12 +1691,15 @@ def delete_document(doc_id):
     """Permanent hard-delete — only allowed on already-discarded documents."""
     db = get_db()
     row = db.execute(
-        "SELECT id FROM documents WHERE id=? AND user_id=? AND discarded=1",
+        "SELECT id, discarded FROM documents WHERE id=? AND user_id=?",
         (doc_id, current_user.id),
     ).fetchone()
     if not row:
         db.close()
         abort(404)
+    if not row['discarded']:
+        db.close()
+        abort(403)
     db.execute("DELETE FROM sent_log WHERE doc_id=?", (doc_id,))
     db.execute(
         "UPDATE documents SET source_document_id=NULL"
@@ -2229,12 +2228,15 @@ def delete_job(job_id):
     """Permanent hard-delete — only allowed on already-discarded jobs."""
     db = get_db()
     job_row = db.execute(
-        "SELECT job_id FROM jobs WHERE job_id=? AND user_id=? AND discarded=1",
+        "SELECT job_id, discarded FROM jobs WHERE job_id=? AND user_id=?",
         (job_id, current_user.id),
     ).fetchone()
     if not job_row:
         db.close()
         abort(404)
+    if not job_row['discarded']:
+        db.close()
+        abort(403)
     doc_ids = [r['id'] for r in db.execute(
         "SELECT id FROM documents WHERE job_id=? AND user_id=?",
         (job_id, current_user.id),
@@ -2258,36 +2260,25 @@ def delete_job(job_id):
     return redirect(url_for('discarded_items'))
 
 
-@app.route('/jobs/bulk_delete', methods=['POST'])
+@app.route('/jobs/bulk_discard', methods=['POST'])
 @login_required
-def bulk_delete_jobs():
+def bulk_discard_jobs():
     job_ids = request.form.getlist('job_ids')
     if not job_ids:
         return redirect(url_for('jobs'))
+    now = datetime.utcnow()
+    jph = ','.join('?' * len(job_ids))
     db = get_db()
-    for jid in job_ids:
-        doc_ids = [r['id'] for r in db.execute(
-            "SELECT id FROM documents WHERE job_id=? AND user_id=?",
-            (jid, current_user.id),
-        ).fetchall()]
-        if doc_ids:
-            ph = ','.join('?' * len(doc_ids))
-            db.execute(f"DELETE FROM sent_log WHERE doc_id IN ({ph})", doc_ids)
-            db.execute(
-                f"UPDATE documents SET source_document_id=NULL "
-                f"WHERE source_document_id IN ({ph}) AND user_id=?",
-                [*doc_ids, current_user.id],
-            )
-            db.execute(
-                f"DELETE FROM documents WHERE id IN ({ph}) AND user_id=?",
-                [*doc_ids, current_user.id],
-            )
-    if job_ids:
-        jph = ','.join('?' * len(job_ids))
-        db.execute(
-            f"DELETE FROM jobs WHERE job_id IN ({jph}) AND user_id=?",
-            [*job_ids, current_user.id],
-        )
+    db.execute(
+        f"UPDATE jobs SET discarded=1, discarded_at=?"
+        f" WHERE job_id IN ({jph}) AND user_id=? AND discarded=0",
+        [now, *job_ids, current_user.id],
+    )
+    db.execute(
+        f"UPDATE documents SET discarded=1, discarded_at=?, discarded_with_job=1"
+        f" WHERE job_id IN ({jph}) AND user_id=? AND discarded=0",
+        [now, *job_ids, current_user.id],
+    )
     db.commit()
     db.close()
     return redirect(url_for('jobs'))
