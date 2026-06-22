@@ -52,7 +52,10 @@
             <input type="checkbox" name="client_ids" value="{{ c.id }}" class="item-checkbox"
                    onchange="onCheckboxChange(this, {{ c.id }})">
           </td>
-          <td class="strong">{{ c.display_name }}</td>
+          <td class="strong">
+            {{ c.display_name }}
+            {% if c.client_code %}<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">{{ c.client_code }}</div>{% endif %}
+          </td>
           <td>{{ c.email or '—' }}</td>
           <td style="white-space:nowrap;">{{ c.phone or '—' }}</td>
           <td>{{ c.city or '—' }}</td>
@@ -75,6 +78,7 @@
       <div class="card-item" data-id="{{ c.id }}" onclick="toggleCardSelect(this, {{ c.id }})">
         <div class="card-check">✓</div>
         <div class="card-name">{{ c.display_name }}</div>
+        {% if c.client_code %}<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">{{ c.client_code }}</div>{% endif %}
         <div class="card-meta">
           {% if c.email %}<span>{{ c.email }}</span>{% endif %}
           {% if c.phone %}<span>{{ c.phone }}</span>{% endif %}

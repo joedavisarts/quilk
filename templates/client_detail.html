@@ -6,6 +6,7 @@
     <a href="{{ url_for('clients') }}" class="btn btn-xs btn-outline" style="margin-bottom:10px;">← Back</a>
     <h1>{{ client.company_name or client.name }}</h1>
     {% if client.company_name and client.name %}<span class="page-sub">{{ client.name }}</span>{% endif %}
+    {% if client.client_code %}<span class="page-sub" style="font-family:monospace;letter-spacing:0.04em;">{{ client.client_code }}</span>{% endif %}
     {% if client.city %}<span class="page-sub">{{ client.city }}{% if client.country %}, {{ client.country }}{% endif %}</span>{% endif %}
   </div>
   <div class="header-actions">

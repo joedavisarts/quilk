@@ -173,6 +173,7 @@ def _normalize_sb_client(row):
         'discarded':    row.get('discarded', False),
         'discarded_at': row.get('discarded_at'),
         'quilk_user_id': row.get('quilk_user_id'),
+        'client_code':  row.get('client_code'),
     }
 
 
@@ -802,6 +803,20 @@ def new_document(doc_type):
             )
         db.commit()
 
+        # Sync financial totals to Supabase gigs
+        _sync_gig_financials(db, job_id, current_user.id)
+
+        # Write client_id to gigs if not already set (Task 3)
+        if job_id and client_uuid:
+            try:
+                gig_check = sb.table('gigs').select('id,client_id')\
+                    .eq('id', job_id).execute()
+                if gig_check.data and not gig_check.data[0].get('client_id'):
+                    sb.table('gigs').update({'client_id': client_uuid})\
+                        .eq('id', job_id).execute()
+            except Exception:
+                pass
+
         if data.get('save_template_name') and line_items:
             first = line_items[0]
             db.execute("PRAGMA foreign_keys = OFF")
@@ -1397,6 +1412,48 @@ def _ensure_job(db, user_id, existing_job_id=None):
     return new_id
 
 
+def _sync_gig_financials(db, job_id, user_id):
+    """Recompute job totals from SQLite docs and push to Supabase gigs."""
+    if not job_id:
+        return
+    job_docs = _rows_to_list(db.execute(
+        "SELECT id, doc_type, status, voided, invoice_type, amount_due, paid_amount,"
+        " source_document_id, subtotal, discount, tax_amount, created_at, currency"
+        " FROM documents WHERE job_id=? AND user_id=? AND discarded=0",
+        (job_id, user_id),
+    ).fetchall())
+    anchor = next(
+        (d for d in job_docs
+         if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
+        None,
+    )
+    overview = _job_overview(job_docs, anchor)
+    if not overview:
+        return
+    try:
+        sb.table('gigs').update({
+            'project_total':      overview['project_total'],
+            'amount_paid':        overview['amount_paid'],
+            'amount_outstanding': overview['balance_outstanding'],
+        }).eq('id', job_id).eq('quilk_user_id', user_id).execute()
+    except Exception:
+        pass
+
+
+@app.route('/api/next-job-number')
+@login_required
+def api_next_job_number():
+    db = get_db()
+    user_row = db.execute("SELECT job_prefix FROM users WHERE id=?", (current_user.id,)).fetchone()
+    prefix = (user_row['job_prefix'] if user_row and user_row['job_prefix'] else 'JOB')
+    counter_row = db.execute(
+        "SELECT last_number FROM job_counter WHERE user_id=?", (current_user.id,)
+    ).fetchone()
+    db.close()
+    last = counter_row['last_number'] if counter_row else 1110
+    return jsonify({'job_number': f'{prefix}{last + 1}'})
+
+
 @app.route('/documents/<int:doc_id>')
 def document_view(doc_id):
     db = get_db()
@@ -1648,6 +1705,7 @@ def generate_invoice(doc_id):
     )
     invoice_id = cur.lastrowid
     db.commit()
+    _sync_gig_financials(db, job_id, current_user.id)
     db.close()
     return redirect(url_for('document_view', doc_id=invoice_id))
 
@@ -1678,6 +1736,7 @@ def generate_receipt_from_invoice(doc_id):
     )
     receipt_id = cur.lastrowid
     db.commit()
+    _sync_gig_financials(db, invoice.get('job_id'), current_user.id)
     db.close()
     return redirect(url_for('document_view', doc_id=receipt_id))
 
@@ -1686,7 +1745,7 @@ def generate_receipt_from_invoice(doc_id):
 def void_document(doc_id):
     db = get_db()
     doc = _row_to_dict(db.execute(
-        "SELECT id, doc_type, voided, source_document_id FROM documents"
+        "SELECT id, doc_type, voided, source_document_id, job_id FROM documents"
         " WHERE id=? AND user_id=?",
         (doc_id, current_user.id),
     ).fetchone())
@@ -1712,6 +1771,7 @@ def void_document(doc_id):
         )
 
     db.commit()
+    _sync_gig_financials(db, doc.get('job_id'), current_user.id)
     db.close()
     return redirect(url_for('document_view', doc_id=doc_id))
 
@@ -1724,12 +1784,19 @@ def bulk_discard_documents():
         now = datetime.utcnow()
         ph = ','.join('?' * len(doc_ids))
         db = get_db()
+        affected_jobs = _rows_to_list(db.execute(
+            f"SELECT DISTINCT job_id FROM documents"
+            f" WHERE id IN ({ph}) AND user_id=? AND discarded=0 AND job_id IS NOT NULL",
+            [*doc_ids, current_user.id],
+        ).fetchall())
         db.execute(
             f"UPDATE documents SET discarded=1, discarded_at=?"
             f" WHERE id IN ({ph}) AND user_id=? AND discarded=0",
             [now, *doc_ids, current_user.id],
         )
         db.commit()
+        for row in affected_jobs:
+            _sync_gig_financials(db, row['job_id'], current_user.id)
         db.close()
     return redirect(url_for('documents'))
 
@@ -1840,6 +1907,7 @@ def edit_document(doc_id):
              notes, pay_by_date, status, doc_id, current_user.id),
         )
         db.commit()
+        _sync_gig_financials(db, doc.get('job_id'), current_user.id)
         db.close()
 
         flash('Document updated successfully.', 'success')
@@ -2442,12 +2510,13 @@ def export_selection_jobs_csv():
 def discard_document(doc_id):
     db = get_db()
     row = db.execute(
-        "SELECT id FROM documents WHERE id=? AND user_id=? AND discarded=0",
+        "SELECT id, job_id FROM documents WHERE id=? AND user_id=? AND discarded=0",
         (doc_id, current_user.id),
     ).fetchone()
     if not row:
         db.close()
         abort(404)
+    job_id = row['job_id'] if row else None
     from datetime import datetime as _dt
     now = _dt.utcnow().isoformat()
     db.execute(
@@ -2455,6 +2524,7 @@ def discard_document(doc_id):
         (now, doc_id, current_user.id),
     )
     db.commit()
+    _sync_gig_financials(db, job_id, current_user.id)
     db.close()
     flash(
         'Document discarded. You can find it under Discarded in the sidebar. '
@@ -2495,12 +2565,18 @@ def discard_job(job_id):
 @login_required
 def restore_document(doc_id):
     db = get_db()
+    job_row = db.execute(
+        "SELECT job_id FROM documents WHERE id=? AND user_id=?",
+        (doc_id, current_user.id),
+    ).fetchone()
+    job_id = job_row['job_id'] if job_row else None
     db.execute(
         "UPDATE documents SET discarded=0, discarded_at=NULL, discarded_with_job=0"
         " WHERE id=? AND user_id=?",
         (doc_id, current_user.id),
     )
     db.commit()
+    _sync_gig_financials(db, job_id, current_user.id)
     db.close()
     flash('Document restored to the active list.', 'success')
     return redirect(url_for('discarded_items'))
