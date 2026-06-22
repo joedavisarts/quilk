@@ -21,6 +21,7 @@ from werkzeug.security import check_password_hash
 
 from database import get_db, init_db, next_doc_number
 from pdf_generator import generate_pdf
+from supabase_client import supabase as sb
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'jdam-ledger-secret-2026')
@@ -153,17 +154,49 @@ def _upsert_item_library(db, description, unit_price, currency, user_id):
     )
 
 
-def _client_display_labels(db, user_id):
-    """Return {client_id: display_label} with disambiguation for colliding base labels."""
-    rows = _rows_to_list(db.execute(
-        "SELECT id, company_name, name, email, phone, address_line1"
-        " FROM clients WHERE user_id=?", (user_id,)
-    ).fetchall())
-    for r in rows:
+def _normalize_sb_client(row):
+    """Convert Supabase clients row to Quilk internal format."""
+    if not row:
+        return None
+    return {
+        'id':           row.get('id'),
+        'name':         row.get('client_name', ''),
+        'company_name': row.get('artist_company_name'),
+        'email':        row.get('email'),
+        'phone':        row.get('phone'),
+        'address':      row.get('address'),
+        'address_line1': row.get('address'),   # compat: put full address in line1
+        'address_line2': None,
+        'city':         None,
+        'country':      None,
+        'notes':        row.get('notes'),
+        'discarded':    row.get('discarded', False),
+        'discarded_at': row.get('discarded_at'),
+        'quilk_user_id': row.get('quilk_user_id'),
+    }
+
+
+def _sb_clients_for_user(user_id, include_discarded=False):
+    """Fetch clients from Supabase for a user."""
+    q = sb.table('clients').select('*').eq('quilk_user_id', user_id)
+    if not include_discarded:
+        q = q.eq('discarded', False)
+    result = q.execute()
+    return [_normalize_sb_client(r) for r in (result.data or [])]
+
+
+def _sb_client_map(user_id, include_discarded=False):
+    """Return {uuid: normalized_client} for a user's Supabase clients."""
+    return {c['id']: c for c in _sb_clients_for_user(user_id, include_discarded)}
+
+
+def _client_display_labels_from_list(clients):
+    """Return {client_id (uuid): display_label} from a list of normalized clients."""
+    for r in clients:
         r['_base'] = ((r.get('company_name') or '').strip() or
                        (r.get('name') or '').strip() or '')
     groups = defaultdict(list)
-    for r in rows:
+    for r in clients:
         groups[r['_base'].lower()].append(r)
     result = {}
     for _, group in groups.items():
@@ -188,8 +221,32 @@ def _client_display_labels(db, user_id):
                         result[c['id']] = f"{base} ({val})"
                         break
                 else:
-                    result[c['id']] = f"{base} (#{c['id']})"
+                    result[c['id']] = f"{base} (#{c['id'][:8]})"
     return result
+
+
+def _normalize_sb_gig(row):
+    """Convert Supabase gigs row to Quilk internal format (matches SQLite jobs shape)."""
+    if not row:
+        return None
+    return {
+        'job_id':     row.get('id'),
+        'job_number': row.get('job_number', ''),
+        'job_title':  row.get('job_title'),
+        'created_at': row.get('created_at'),
+        'discarded':  row.get('discarded', False),
+        'discarded_at': row.get('discarded_at'),
+        'user_id':    row.get('quilk_user_id'),
+    }
+
+
+def _sb_gigs_for_user(user_id, include_discarded=False):
+    """Fetch gigs from Supabase for a user."""
+    q = sb.table('gigs').select('*').eq('quilk_user_id', user_id)
+    if not include_discarded:
+        q = q.eq('discarded', False)
+    result = q.execute()
+    return [_normalize_sb_gig(r) for r in (result.data or [])]
 
 
 # ---------------------------------------------------------------------------
@@ -641,17 +698,11 @@ def dashboard():
     db = get_db()
     recent = _rows_to_list(
         db.execute(
-            "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-            " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? AND d.discarded=0 ORDER BY d.created_at DESC LIMIT 10",
+            "SELECT * FROM documents WHERE user_id=? AND discarded=0"
+            " ORDER BY created_at DESC LIMIT 10",
             (current_user.id,),
         ).fetchall()
     )
-    labels = _client_display_labels(db, current_user.id)
-    for row in recent:
-        if row.get('client_id'):
-            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
-        row['is_overdue'] = _is_overdue(row)
     counts = {}
     for dt in ('invoice', 'quote', 'receipt'):
         row = db.execute(
@@ -660,6 +711,14 @@ def dashboard():
         ).fetchone()
         counts[dt] = row['n']
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    for row in recent:
+        cuuid = row.get('client_uuid')
+        row['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
+        row['is_overdue'] = _is_overdue(row)
+
     return render_template('dashboard.html', recent=recent, counts=counts)
 
 
@@ -676,24 +735,32 @@ def new_document(doc_type):
 
     if request.method == 'POST':
         data = request.form
-        client_id = data.get('client_id') or None
+        client_uuid = data.get('client_id') or None
 
         new_name = data.get('new_client_name', '').strip()
         new_company = data.get('new_client_company_name', '').strip()
         if new_name or new_company:
-            cur = db.execute(
-                "INSERT INTO clients (company_name,name,email,phone,address_line1,"
-                "address_line2,city,country,notes,user_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (new_company or None, new_name, data.get('new_client_email'),
-                 data.get('new_client_phone'), data.get('new_client_addr1'),
-                 data.get('new_client_addr2'), data.get('new_client_city'),
-                 data.get('new_client_country'), data.get('new_client_notes'),
-                 current_user.id),
-            )
-            client_id = cur.lastrowid
-            db.commit()
+            new_client_uuid = str(uuid.uuid4())
+            addr_parts = [
+                (data.get('new_client_addr1') or '').strip(),
+                (data.get('new_client_addr2') or '').strip(),
+                (data.get('new_client_city') or '').strip(),
+                (data.get('new_client_country') or '').strip(),
+            ]
+            _addr = ', '.join(p for p in addr_parts if p) or None
+            sb.table('clients').insert({
+                'id': new_client_uuid,
+                'quilk_user_id': current_user.id,
+                'client_name': new_name,
+                'artist_company_name': new_company or None,
+                'email': data.get('new_client_email') or None,
+                'phone': data.get('new_client_phone') or None,
+                'address': _addr,
+                'notes': data.get('new_client_notes') or None,
+            }).execute()
+            client_uuid = new_client_uuid
 
-        if not client_id:
+        if not client_uuid:
             db.close()
             return jsonify({'error': 'Client required'}), 400
 
@@ -716,11 +783,11 @@ def new_document(doc_type):
         job_id = _ensure_job(db, current_user.id, existing_job_id)
 
         cur = db.execute(
-            "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,"
+            "INSERT INTO documents (doc_type,doc_number,client_uuid,date_issued,"
             "currency,line_items,subtotal,discount,tax_amount,paid_amount,"
             "amount_due,status,notes,pay_by_date,user_id,job_id) VALUES "
             "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (doc_type, doc_number, client_id, doc_date, currency,
+            (doc_type, doc_number, client_uuid, doc_date, currency,
              json.dumps(line_items), subtotal, discount, tax_amount,
              paid_amount, amount_due, 'pending', notes, pay_by_date,
              current_user.id, job_id),
@@ -737,31 +804,25 @@ def new_document(doc_type):
 
         if data.get('save_template_name') and line_items:
             first = line_items[0]
+            db.execute("PRAGMA foreign_keys = OFF")
             db.execute(
-                "INSERT INTO client_templates (client_id,template_name,"
-                "service_description,unit_price,currency,qty,discount,"
-                "tax_rate,notes) VALUES (?,?,?,?,?,?,?,?,?)",
-                (client_id, data['save_template_name'],
+                "INSERT INTO client_templates (client_id,client_uuid,template_name,"
+                "service_description,unit_price,currency,qty,discount,tax_rate,notes)"
+                " VALUES (0,?,?,?,?,?,?,?,?,?)",
+                (client_uuid, data['save_template_name'],
                  first.get('description'), first.get('unit_price'),
-                 currency, first.get('qty', 1), discount_val, tax_val, notes),
+                 currency, first.get('qty', 1), discount_val, 0, notes),
             )
             db.commit()
 
         db.close()
         return redirect(url_for('document_view', doc_id=doc_id))
 
-    clients = _rows_to_list(
-        db.execute(
-            "SELECT id, name, company_name,"
-            " COALESCE(NULLIF(company_name,''), name) AS display_name"
-            " FROM clients WHERE user_id=?"
-            " ORDER BY COALESCE(NULLIF(company_name,''), name)",
-            (current_user.id,),
-        ).fetchall()
-    )
-    labels = _client_display_labels(db, current_user.id)
+    clients = _sb_clients_for_user(current_user.id)
+    labels = _client_display_labels_from_list(clients)
     for c in clients:
-        c['display_name'] = labels.get(c['id'], c['display_name'])
+        c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+    clients.sort(key=lambda c: (c.get('display_name') or '').lower())
     db.close()
     today = date.today().isoformat()
     return render_template('new_document.html', doc_type=doc_type,
@@ -773,19 +834,15 @@ def new_document(doc_type):
 # Client templates API
 # ---------------------------------------------------------------------------
 
-@app.route('/api/clients/<int:client_id>/templates')
+@app.route('/api/clients/<client_id>/templates')
 def client_templates(client_id):
-    db = get_db()
-    owner = db.execute(
-        "SELECT id FROM clients WHERE id=? AND user_id=?",
-        (client_id, current_user.id),
-    ).fetchone()
-    if not owner:
-        db.close()
+    result = sb.table('clients').select('id').eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
+    if not result.data:
         return jsonify([])
+    db = get_db()
     rows = _rows_to_list(
         db.execute(
-            "SELECT * FROM client_templates WHERE client_id=?", (client_id,)
+            "SELECT * FROM client_templates WHERE client_uuid=?", (client_id,)
         ).fetchall()
     )
     db.close()
@@ -822,30 +879,45 @@ def search_documents():
     q = request.args.get('q', '').strip()
     db = get_db()
 
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+
     if q:
         rows = _rows_to_list(db.execute(
-            "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-            " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? AND d.discarded=0"
-            " AND (d.doc_number LIKE ? OR c.name LIKE ? OR c.company_name LIKE ?)"
-            " ORDER BY d.created_at DESC LIMIT 50",
-            (current_user.id, f'%{q}%', f'%{q}%', f'%{q}%'),
+            "SELECT * FROM documents WHERE user_id=? AND discarded=0"
+            " AND doc_number LIKE ? ORDER BY created_at DESC LIMIT 50",
+            (current_user.id, f'%{q}%'),
         ).fetchall())
+        q_lower = q.lower()
+        matching_uuids = {
+            c['id'] for c in client_map.values()
+            if q_lower in (c.get('name') or '').lower()
+            or q_lower in (c.get('company_name') or '').lower()
+        }
+        if matching_uuids:
+            existing_ids = {r['id'] for r in rows}
+            ph = ','.join('?' * len(matching_uuids))
+            extra = _rows_to_list(db.execute(
+                f"SELECT * FROM documents WHERE user_id=? AND discarded=0"
+                f" AND client_uuid IN ({ph}) ORDER BY created_at DESC LIMIT 50",
+                [current_user.id, *matching_uuids],
+            ).fetchall())
+            for r in extra:
+                if r['id'] not in existing_ids:
+                    rows.append(r)
+        rows = sorted(rows, key=lambda r: r.get('created_at', ''), reverse=True)[:50]
     else:
         rows = _rows_to_list(db.execute(
-            "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-            " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? AND d.discarded=0 ORDER BY d.created_at DESC LIMIT 50",
-            (current_user.id,),
+            "SELECT * FROM documents WHERE user_id=? AND discarded=0"
+            " ORDER BY created_at DESC LIMIT 50", (current_user.id,),
         ).fetchall())
 
-    labels = _client_display_labels(db, current_user.id)
+    db.close()
     for row in rows:
         row['line_items'] = _parse_line_items(row['line_items'])
-        if row.get('client_id'):
-            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
+        cuuid = row.get('client_uuid')
+        row['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
 
-    db.close()
     return jsonify(rows)
 
 
@@ -855,46 +927,44 @@ def search_documents():
 
 @app.route('/clients', methods=['GET', 'POST'])
 def clients():
-    db = get_db()
-
     if request.method == 'POST':
         d = request.form
         company = (d.get('company_name') or '').strip() or None
         name = (d.get('name') or '').strip() or None
         if not company and not name:
-            db.close()
             return redirect(url_for('clients'))
-        db.execute(
-            "INSERT INTO clients (company_name,name,email,phone,address_line1,"
-            "address_line2,city,country,notes,user_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (company, name, d.get('email') or None, d.get('phone') or None,
-             d.get('address_line1') or None, d.get('address_line2') or None,
-             d.get('city') or None, d.get('country') or None,
-             d.get('notes') or None, current_user.id),
-        )
-        db.commit()
-        db.close()
+        addr_parts = [(d.get('address_line1') or '').strip(), (d.get('address_line2') or '').strip(),
+                      (d.get('city') or '').strip(), (d.get('country') or '').strip()]
+        _addr = ', '.join(p for p in addr_parts if p) or None
+        sb.table('clients').insert({
+            'id': str(uuid.uuid4()),
+            'quilk_user_id': current_user.id,
+            'client_name': name or '',
+            'artist_company_name': company,
+            'email': d.get('email') or None,
+            'phone': d.get('phone') or None,
+            'address': _addr,
+            'notes': d.get('notes') or None,
+        }).execute()
         return redirect(url_for('clients'))
 
-    rows = _rows_to_list(
-        db.execute(
-            "SELECT c.*, COUNT(d.id) AS doc_count,"
-            " COALESCE(NULLIF(c.company_name,''), c.name) AS display_name"
-            " FROM clients c LEFT JOIN documents d ON d.client_id = c.id"
-            " WHERE c.user_id=? AND c.discarded=0 GROUP BY c.id"
-            " ORDER BY COALESCE(NULLIF(c.company_name,''), c.name)",
-            (current_user.id,),
-        ).fetchall()
-    )
-    labels = _client_display_labels(db, current_user.id)
-    for r in rows:
-        r['display_name'] = labels.get(r['id'], r['display_name'])
-    user_row = db.execute(
-        "SELECT view_pref_clients FROM users WHERE id=?", (current_user.id,)
-    ).fetchone()
+    clients_list = _sb_clients_for_user(current_user.id)
+    labels = _client_display_labels_from_list(clients_list)
+    db = get_db()
+    dc_rows = _rows_to_list(db.execute(
+        "SELECT client_uuid, COUNT(*) AS doc_count FROM documents"
+        " WHERE user_id=? AND discarded=0 AND client_uuid IS NOT NULL GROUP BY client_uuid",
+        (current_user.id,),
+    ).fetchall())
+    user_row = db.execute("SELECT view_pref_clients FROM users WHERE id=?", (current_user.id,)).fetchone()
     view_pref = (user_row['view_pref_clients'] if user_row else None) or 'list'
     db.close()
-    return render_template('clients.html', clients=rows, view_pref=view_pref)
+    doc_count_map = {r['client_uuid']: r['doc_count'] for r in dc_rows}
+    for c in clients_list:
+        c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '—')
+        c['doc_count'] = doc_count_map.get(c['id'], 0)
+    clients_list.sort(key=lambda c: (c.get('display_name') or '').lower())
+    return render_template('clients.html', clients=clients_list, view_pref=view_pref)
 
 
 @app.route('/clients/import', methods=['POST'])
@@ -907,7 +977,6 @@ def import_clients():
         return jsonify({'error': 'rows_json must be a list'}), 400
     imported = 0
     skipped = 0
-    db = get_db()
     try:
         for row in rows:
             company = (row.get('company_name') or '').strip() or None
@@ -915,48 +984,41 @@ def import_clients():
             if not company and not name:
                 skipped += 1
                 continue
-            db.execute(
-                "INSERT INTO clients (company_name,name,email,phone,address_line1,"
-                "address_line2,city,country,notes,user_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (company, name or '',
-                 (row.get('email') or '').strip() or None,
-                 (row.get('phone') or '').strip() or None,
-                 (row.get('address_line1') or '').strip() or None,
-                 (row.get('address_line2') or '').strip() or None,
-                 (row.get('city') or '').strip() or None,
-                 (row.get('country') or '').strip() or None,
-                 (row.get('notes') or '').strip() or None,
-                 current_user.id),
-            )
+            addr_parts = [(row.get('address_line1') or '').strip(), (row.get('address_line2') or '').strip(),
+                          (row.get('city') or '').strip(), (row.get('country') or '').strip()]
+            _addr = ', '.join(p for p in addr_parts if p) or None
+            sb.table('clients').insert({
+                'id': str(uuid.uuid4()),
+                'quilk_user_id': current_user.id,
+                'client_name': name or '',
+                'artist_company_name': company,
+                'email': (row.get('email') or '').strip() or None,
+                'phone': (row.get('phone') or '').strip() or None,
+                'address': _addr,
+                'notes': (row.get('notes') or '').strip() or None,
+            }).execute()
             imported += 1
-        db.commit()
     except Exception as exc:
-        db.close()
         return jsonify({'error': str(exc)}), 500
-    db.close()
     return jsonify({'imported': imported, 'skipped': skipped})
 
 
-@app.route('/clients/<int:client_id>')
+@app.route('/clients/<client_id>')
 def client_detail(client_id):
-    db = get_db()
-    client = _row_to_dict(
-        db.execute(
-            "SELECT * FROM clients WHERE id=? AND user_id=?",
-            (client_id, current_user.id),
-        ).fetchone()
-    )
-    if not client:
+    result = sb.table('clients').select('*').eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
+    if not result.data:
         abort(404)
+    client = _normalize_sb_client(result.data[0])
+    db = get_db()
     docs = _rows_to_list(
         db.execute(
-            "SELECT * FROM documents WHERE client_id=? AND user_id=? ORDER BY created_at DESC",
+            "SELECT * FROM documents WHERE client_uuid=? AND user_id=? ORDER BY created_at DESC",
             (client_id, current_user.id),
         ).fetchall()
     )
     templates = _rows_to_list(
         db.execute(
-            "SELECT * FROM client_templates WHERE client_id=?", (client_id,)
+            "SELECT * FROM client_templates WHERE client_uuid=?", (client_id,)
         ).fetchall()
     )
     db.close()
@@ -964,49 +1026,44 @@ def client_detail(client_id):
                            docs=docs, templates=templates)
 
 
-@app.route('/clients/<int:client_id>/edit', methods=['GET', 'POST'])
+@app.route('/clients/<client_id>/edit', methods=['GET', 'POST'])
 def client_edit(client_id):
-    db = get_db()
-    client = _row_to_dict(
-        db.execute(
-            "SELECT * FROM clients WHERE id=? AND user_id=?",
-            (client_id, current_user.id),
-        ).fetchone()
-    )
-    if not client:
+    result = sb.table('clients').select('*').eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
+    if not result.data:
         abort(404)
+    client = _normalize_sb_client(result.data[0])
 
     if request.method == 'POST':
         d = request.form
-        db.execute(
-            "UPDATE clients SET company_name=?,name=?,email=?,phone=?,address_line1=?,"
-            "address_line2=?,city=?,country=?,notes=? WHERE id=? AND user_id=?",
-            (d.get('company_name') or None, d['name'], d.get('email'), d.get('phone'),
-             d.get('address_line1'), d.get('address_line2'),
-             d.get('city'), d.get('country'), d.get('notes'),
-             client_id, current_user.id),
-        )
-        db.commit()
-        db.close()
+        addr_parts = [
+            (d.get('address_line1') or '').strip(),
+            (d.get('address_line2') or '').strip(),
+            (d.get('city') or '').strip(),
+            (d.get('country') or '').strip(),
+        ]
+        _addr = ', '.join(p for p in addr_parts if p) or None
+        sb.table('clients').update({
+            'client_name': d.get('name') or '',
+            'artist_company_name': d.get('company_name') or None,
+            'email': d.get('email') or None,
+            'phone': d.get('phone') or None,
+            'address': _addr,
+            'notes': d.get('notes') or None,
+        }).eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
         return redirect(url_for('client_detail', client_id=client_id))
 
-    db.close()
     return render_template('client_edit.html', client=client)
 
 
-@app.route('/clients/<int:client_id>/templates/<int:tmpl_id>/delete',
+@app.route('/clients/<client_id>/templates/<int:tmpl_id>/delete',
            methods=['POST'])
 def delete_template(client_id, tmpl_id):
-    db = get_db()
-    owner = db.execute(
-        "SELECT id FROM clients WHERE id=? AND user_id=?",
-        (client_id, current_user.id),
-    ).fetchone()
-    if not owner:
-        db.close()
+    result = sb.table('clients').select('id').eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
+    if not result.data:
         abort(403)
+    db = get_db()
     db.execute(
-        "DELETE FROM client_templates WHERE id=? AND client_id=?",
+        "DELETE FROM client_templates WHERE id=? AND client_uuid=?",
         (tmpl_id, client_id),
     )
     db.commit()
@@ -1019,42 +1076,34 @@ def delete_template(client_id, tmpl_id):
 def bulk_discard_clients():
     client_ids = request.form.getlist('client_ids')
     if client_ids:
-        now = datetime.utcnow()
-        ph = ','.join('?' * len(client_ids))
-        db = get_db()
-        db.execute(
-            f"UPDATE clients SET discarded=1, discarded_at=?"
-            f" WHERE id IN ({ph}) AND user_id=? AND discarded=0",
-            [now, *client_ids, current_user.id],
-        )
-        db.commit()
-        db.close()
+        now = datetime.utcnow().isoformat()
+        for cid in client_ids:
+            sb.table('clients').update({'discarded': True, 'discarded_at': now})\
+              .eq('id', cid).eq('quilk_user_id', current_user.id).eq('discarded', False).execute()
     return redirect(url_for('clients'))
 
 
-@app.route('/clients/<int:client_id>/export')
+@app.route('/clients/<client_id>/export')
 def export_client(client_id):
-    db = get_db()
-    client = _row_to_dict(
-        db.execute(
-            "SELECT * FROM clients WHERE id=? AND user_id=?",
-            (client_id, current_user.id),
-        ).fetchone()
-    )
-    if not client:
+    result = sb.table('clients').select('*').eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
+    if not result.data:
         abort(404)
+    client = _normalize_sb_client(result.data[0])
+    db = get_db()
     docs = _rows_to_list(
         db.execute(
-            "SELECT * FROM documents WHERE client_id=? AND user_id=? ORDER BY created_at DESC",
+            "SELECT * FROM documents WHERE client_uuid=? AND user_id=? ORDER BY created_at DESC",
             (client_id, current_user.id),
         ).fetchall()
     )
+    db.close()
     for d in docs:
         d['line_items'] = _parse_line_items(d['line_items'])
     payload = json.dumps({'client': client, 'documents': docs}, indent=2)
     buf = io.BytesIO(payload.encode())
     buf.seek(0)
-    filename = f"client_{client['name'].replace(' ','_')}_export.json"
+    name = client.get('name') or client.get('company_name') or client_id
+    filename = f"client_{name.replace(' ','_')}_export.json"
     return send_file(buf, mimetype='application/json',
                      as_attachment=True, download_name=filename)
 
@@ -1076,12 +1125,8 @@ def _doc_type_summary(type_counts):
 def jobs():
     db = get_db()
 
-    # Get job metadata from jobs table (ordered newest first)
-    job_meta_rows = _rows_to_list(db.execute(
-        "SELECT j.id, j.job_id, j.job_number, j.job_title, j.created_at"
-        " FROM jobs j WHERE j.user_id=? AND j.discarded=0 ORDER BY j.created_at DESC",
-        (current_user.id,),
-    ).fetchall())
+    # Get job metadata from Supabase gigs table
+    job_meta_rows = _sb_gigs_for_user(current_user.id)
     job_meta_map = {j['job_id']: j for j in job_meta_rows}
 
     # Get all active (non-discarded) documents grouped by job_id
@@ -1089,14 +1134,15 @@ def jobs():
         "SELECT d.id, d.job_id, d.doc_type, d.doc_number, d.status, d.voided,"
         " d.invoice_type, d.amount_due, d.paid_amount, d.subtotal, d.discount,"
         " d.tax_amount, d.source_document_id, d.created_at, d.pay_by_date,"
-        " d.client_id, d.currency"
+        " d.client_uuid, d.currency"
         " FROM documents d"
         " WHERE d.user_id=? AND d.job_id IS NOT NULL AND d.discarded=0"
         " ORDER BY d.created_at ASC",
         (current_user.id,),
     ).fetchall())
 
-    labels = _client_display_labels(db, current_user.id)
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
     user_row = db.execute(
         "SELECT view_pref_jobs FROM users WHERE id=?", (current_user.id,)
     ).fetchone()
@@ -1121,8 +1167,8 @@ def jobs():
                  if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
                 docs[0],
             )
-            client_id = anchor.get('client_id')
-            client_name = labels.get(client_id) if client_id else '—'
+            client_uuid = anchor.get('client_uuid')
+            client_name = labels.get(client_uuid) if client_uuid else '—'
             type_counts = defaultdict(int)
             for d in docs:
                 type_counts[d['doc_type']] += 1
@@ -1131,7 +1177,7 @@ def jobs():
             overview = _job_overview(docs, anchor)
             latest = max(d['created_at'] for d in docs)
         else:
-            client_id = None
+            client_uuid = None
             client_name = '—'
             type_counts = defaultdict(int)
             has_overdue = False
@@ -1149,7 +1195,7 @@ def jobs():
             'job_title': job_title,
             'display_name': display_name,
             'client_name': client_name,
-            'client_id': client_id,
+            'client_uuid': client_uuid,
             'doc_count': len(docs),
             'type_summary': _doc_type_summary(dict(type_counts)),
             'has_overdue': has_overdue,
@@ -1166,22 +1212,18 @@ def jobs():
 def job_detail(job_id):
     db = get_db()
 
-    # Load job record from jobs table (may not exist for legacy jobs)
-    job_row = _row_to_dict(db.execute(
-        "SELECT * FROM jobs WHERE job_id=? AND user_id=?",
-        (job_id, current_user.id),
-    ).fetchone() or {})
+    # Load job record from Supabase gigs
+    gig_result = sb.table('gigs').select('*').eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
+    job_row = _normalize_sb_gig(gig_result.data[0]) if gig_result.data else {}
 
     job_number = job_row.get('job_number') if job_row else None
     job_title = job_row.get('job_title') if job_row else None
     display_name = job_title or job_number or job_id[:8]
 
     docs = _rows_to_list(db.execute(
-        "SELECT d.*,"
-        " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
-        " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0"
-        " ORDER BY d.created_at ASC",
+        "SELECT * FROM documents"
+        " WHERE job_id=? AND user_id=? AND discarded=0"
+        " ORDER BY created_at ASC",
         (job_id, current_user.id),
     ).fetchall())
 
@@ -1190,9 +1232,14 @@ def job_detail(job_id):
         db.close()
         abort(404)
 
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+
     for d in docs:
         d['is_overdue'] = _is_overdue(d)
         d['line_items'] = _parse_line_items(d.get('line_items', '[]'))
+        cuuid = d.get('client_uuid')
+        d['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
 
     anchor = None
     if docs:
@@ -1203,20 +1250,17 @@ def job_detail(job_id):
         )
 
     client = None
-    if anchor and anchor.get('client_id'):
-        client = _row_to_dict(db.execute(
-            "SELECT * FROM clients WHERE id=? AND user_id=?",
-            (anchor['client_id'], current_user.id),
-        ).fetchone())
+    if anchor and anchor.get('client_uuid'):
+        client = client_map.get(anchor['client_uuid'])
 
     overview = _job_overview(docs, anchor) if anchor else None
 
     # Other jobs for reassignment dropdown
-    other_jobs = _rows_to_list(db.execute(
-        "SELECT job_id, job_number, job_title FROM jobs"
-        " WHERE user_id=? AND job_id!=? ORDER BY job_number",
-        (current_user.id, job_id),
-    ).fetchall())
+    other_gigs = _sb_gigs_for_user(current_user.id)
+    other_jobs = [
+        {'job_id': g['job_id'], 'job_number': g['job_number'], 'job_title': g['job_title']}
+        for g in other_gigs if g['job_id'] != job_id
+    ]
 
     db.close()
     return render_template('job_detail.html',
@@ -1242,29 +1286,30 @@ def documents():
     doc_type = request.args.get('type', '')
     status = request.args.get('status', '')
     query = (
-        "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-        " WHERE d.user_id=? AND d.discarded=0"
+        "SELECT * FROM documents WHERE user_id=? AND discarded=0"
     )
     params = [current_user.id]
     if doc_type:
-        query += " AND d.doc_type=?"
+        query += " AND doc_type=?"
         params.append(doc_type)
     if status:
-        query += " AND d.status=?"
+        query += " AND status=?"
         params.append(status)
-    query += " ORDER BY d.created_at DESC"
+    query += " ORDER BY created_at DESC"
     rows = _rows_to_list(db.execute(query, params).fetchall())
-    labels = _client_display_labels(db, current_user.id)
-    for row in rows:
-        if row.get('client_id'):
-            row['client_name'] = labels.get(row['client_id'], row.get('client_name'))
-        row['is_overdue'] = _is_overdue(row)
     user_row = db.execute(
         "SELECT view_pref_documents FROM users WHERE id=?", (current_user.id,)
     ).fetchone()
     view_pref = (user_row['view_pref_documents'] if user_row else None) or 'list'
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    for row in rows:
+        cuuid = row.get('client_uuid')
+        row['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
+        row['is_overdue'] = _is_overdue(row)
+
     return render_template('documents.html', documents=rows,
                            filter_type=doc_type, filter_status=status,
                            view_pref=view_pref)
@@ -1337,20 +1382,18 @@ def _next_job_number(db, user_id):
 
 
 def _ensure_job(db, user_id, existing_job_id=None):
-    """Return a valid job_id for user, creating a jobs record if needed."""
+    """Return a valid job_id for user, creating a gig record in Supabase if needed."""
     if existing_job_id:
-        row = db.execute(
-            "SELECT job_id FROM jobs WHERE job_id=? AND user_id=?",
-            (existing_job_id, user_id),
-        ).fetchone()
-        if row:
+        result = sb.table('gigs').select('id').eq('id', existing_job_id).eq('quilk_user_id', user_id).execute()
+        if result.data:
             return existing_job_id
     new_id = existing_job_id or str(uuid.uuid4())
     job_number = _next_job_number(db, user_id)
-    db.execute(
-        "INSERT OR IGNORE INTO jobs (job_id, user_id, job_number) VALUES (?, ?, ?)",
-        (new_id, user_id, job_number),
-    )
+    sb.table('gigs').insert({
+        'id': new_id,
+        'quilk_user_id': user_id,
+        'job_number': job_number,
+    }).execute()
     return new_id
 
 
@@ -1366,10 +1409,13 @@ def document_view(doc_id):
     if not doc:
         abort(404)
     doc['line_items'] = _parse_line_items(doc['line_items'])
-    client = _row_to_dict(
-        db.execute("SELECT * FROM clients WHERE id=?",
-                   (doc['client_id'],)).fetchone()
-    )
+
+    client = None
+    if doc.get('client_uuid'):
+        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
+        if result.data:
+            client = _normalize_sb_client(result.data[0])
+
     sent_logs = _rows_to_list(
         db.execute(
             "SELECT * FROM sent_log WHERE doc_id=? ORDER BY sent_at DESC",
@@ -1406,15 +1452,18 @@ def document_view(doc_id):
             "SELECT d.id, d.doc_type, d.doc_number, d.status, d.voided,"
             " d.invoice_type, d.amount_due, d.paid_amount, d.source_document_id,"
             " d.subtotal, d.discount, d.tax_amount, d.job_id, d.created_at,"
-            " d.pay_by_date,"
-            " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-            " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
-            " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0"
-            " ORDER BY d.created_at",
+            " d.pay_by_date, d.client_uuid"
+            " FROM documents d"
+            " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0 ORDER BY d.created_at",
             (job_id, current_user.id),
         ).fetchall())
+
+        client_map = _sb_client_map(current_user.id, include_discarded=True)
+        labels = _client_display_labels_from_list(list(client_map.values()))
         for jd in job_docs:
             jd['is_overdue'] = _is_overdue(jd)
+            cuuid = jd.get('client_uuid')
+            jd['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
         job_family = job_docs
 
         anchor = next(
@@ -1427,15 +1476,13 @@ def document_view(doc_id):
     job_meta = None
     other_jobs = []
     if doc.get('job_id'):
-        job_meta = _row_to_dict(db.execute(
-            "SELECT * FROM jobs WHERE job_id=? AND user_id=?",
-            (doc['job_id'], current_user.id),
-        ).fetchone() or {})
-        other_jobs = _rows_to_list(db.execute(
-            "SELECT job_id, job_number, job_title FROM jobs"
-            " WHERE user_id=? AND job_id!=? ORDER BY job_number",
-            (current_user.id, doc['job_id']),
-        ).fetchall())
+        gig_result = sb.table('gigs').select('*').eq('id', doc['job_id']).eq('quilk_user_id', current_user.id).execute()
+        job_meta = _normalize_sb_gig(gig_result.data[0]) if gig_result.data else {}
+        other_gigs = _sb_gigs_for_user(current_user.id)
+        other_jobs = [
+            {'job_id': g['job_id'], 'job_number': g['job_number'], 'job_title': g['job_title']}
+            for g in other_gigs if g['job_id'] != doc['job_id']
+        ]
 
     db.close()
     return render_template(
@@ -1468,11 +1515,13 @@ def document_pdf(doc_id):
     if not doc:
         abort(404)
     doc['line_items'] = _parse_line_items(doc['line_items'])
-    client = _row_to_dict(
-        db.execute("SELECT * FROM clients WHERE id=?",
-                   (doc['client_id'],)).fetchone()
-    ) or {}
     db.close()
+
+    client = {}
+    if doc.get('client_uuid'):
+        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
+        if result.data:
+            client = _normalize_sb_client(result.data[0]) or {}
 
     pdf_bytes = generate_pdf(doc, client, current_user.to_dict())
     buf = io.BytesIO(pdf_bytes)
@@ -1585,12 +1634,12 @@ def generate_invoice(doc_id):
 
     doc_number = next_doc_number('invoice', current_user.id, current_user.doc_prefix_invoice)
     cur = db.execute(
-        "INSERT INTO documents (doc_type, doc_number, client_id, date_issued, currency,"
+        "INSERT INTO documents (doc_type, doc_number, client_uuid, date_issued, currency,"
         " line_items, subtotal, discount, tax_amount, paid_amount, amount_due, status,"
         " notes, source_document_id, user_id, job_id, invoice_type,"
         " deposit_amount, deposit_type, pay_by_date)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ('invoice', doc_number, anchor['client_id'], date.today().isoformat(),
+        ('invoice', doc_number, anchor.get('client_uuid'), date.today().isoformat(),
          anchor['currency'], anchor['line_items'], anchor['subtotal'],
          anchor['discount'], anchor['tax_amount'], 0,
          amount_due, 'pending', anchor['notes'],
@@ -1618,10 +1667,10 @@ def generate_receipt_from_invoice(doc_id):
         abort(400)
     doc_number = next_doc_number('receipt', current_user.id, current_user.doc_prefix_receipt)
     cur = db.execute(
-        "INSERT INTO documents (doc_type,doc_number,client_id,date_issued,currency,"
+        "INSERT INTO documents (doc_type,doc_number,client_uuid,date_issued,currency,"
         "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
         "source_document_id,user_id,job_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        ('receipt', doc_number, invoice['client_id'], date.today().isoformat(),
+        ('receipt', doc_number, invoice.get('client_uuid'), date.today().isoformat(),
          invoice['currency'], invoice['line_items'], invoice['subtotal'],
          invoice['discount'], invoice['tax_amount'], invoice['amount_due'],
          0, 'pending', invoice['notes'], doc_id, current_user.id,
@@ -1720,13 +1769,17 @@ def export_csv():
     db = get_db()
     rows = _rows_to_list(
         db.execute(
-            "SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-            " FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-            " WHERE d.user_id=? ORDER BY d.created_at DESC",
+            "SELECT * FROM documents WHERE user_id=? ORDER BY created_at DESC",
             (current_user.id,),
         ).fetchall()
     )
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    for row in rows:
+        cuuid = row.get('client_uuid')
+        row['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
 
     output = io.StringIO()
     fieldnames = ['doc_number', 'doc_type', 'client_name', 'date_issued',
@@ -1762,7 +1815,7 @@ def edit_document(doc_id):
 
     if request.method == 'POST':
         data = request.form
-        client_id = data.get('client_id') or doc['client_id']
+        client_uuid = data.get('client_id') or doc.get('client_uuid')
 
         line_items = json.loads(data.get('line_items_json', '[]'))
         discount_val = float(data.get('discount_val', 0))
@@ -1779,10 +1832,10 @@ def edit_document(doc_id):
         )
 
         db.execute(
-            "UPDATE documents SET client_id=?,date_issued=?,currency=?,line_items=?,"
+            "UPDATE documents SET client_uuid=?,date_issued=?,currency=?,line_items=?,"
             "subtotal=?,discount=?,tax_amount=?,paid_amount=?,amount_due=?,"
             "notes=?,pay_by_date=?,status=? WHERE id=? AND user_id=?",
-            (client_id, doc_date, currency, json.dumps(line_items),
+            (client_uuid, doc_date, currency, json.dumps(line_items),
              subtotal, discount, tax_amount, paid_amount, amount_due,
              notes, pay_by_date, status, doc_id, current_user.id),
         )
@@ -1792,18 +1845,13 @@ def edit_document(doc_id):
         flash('Document updated successfully.', 'success')
         return redirect(url_for('document_view', doc_id=doc_id))
 
-    clients = _rows_to_list(
-        db.execute(
-            "SELECT id, name, company_name,"
-            " COALESCE(NULLIF(company_name,''), name) AS display_name"
-            " FROM clients WHERE user_id=?"
-            " ORDER BY COALESCE(NULLIF(company_name,''), name)",
-            (current_user.id,),
-        ).fetchall()
-    )
-    labels = _client_display_labels(db, current_user.id)
+    clients = _sb_clients_for_user(current_user.id)
+    labels = _client_display_labels_from_list(clients)
     for c in clients:
-        c['display_name'] = labels.get(c['id'], c['display_name'])
+        c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+    clients.sort(key=lambda c: (c.get('display_name') or '').lower())
+    # Set client_id to client_uuid so the template dropdown pre-selects correctly
+    doc['client_id'] = doc.get('client_uuid')
     db.close()
     return render_template('edit_document.html', doc=doc, clients=clients)
 
@@ -1825,10 +1873,13 @@ def send_document(doc_id):
         db.close()
         abort(404)
     doc['line_items'] = _parse_line_items(doc['line_items'])
-    client = _row_to_dict(
-        db.execute("SELECT * FROM clients WHERE id=?",
-                   (doc['client_id'],)).fetchone()
-    ) or {}
+
+    client = {}
+    if doc.get('client_uuid'):
+        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
+        if result.data:
+            client = _normalize_sb_client(result.data[0]) or {}
+
     tpl_row = _row_to_dict(
         db.execute(
             "SELECT subject_template, body_template FROM email_templates WHERE user_id=? AND doc_type=?",
@@ -1925,10 +1976,13 @@ def remind_document(doc_id):
         db.close()
         abort(403)
     doc['line_items'] = _parse_line_items(doc['line_items'])
-    client = _row_to_dict(
-        db.execute("SELECT * FROM clients WHERE id=?",
-                   (doc['client_id'],)).fetchone()
-    ) or {}
+
+    client = {}
+    if doc.get('client_uuid'):
+        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
+        if result.data:
+            client = _normalize_sb_client(result.data[0]) or {}
+
     tpl_key = doc['doc_type'] + '_reminder'
     tpl_row = _row_to_dict(
         db.execute(
@@ -2063,16 +2117,11 @@ def api_view_pref():
 @app.route('/clients/export_selection_csv', methods=['POST'])
 @login_required
 def export_selection_clients_csv():
-    client_ids = [int(x) for x in request.form.getlist('client_ids') if x.isdigit()]
+    client_ids = request.form.getlist('client_ids')
     if not client_ids:
         return redirect(url_for('clients'))
-    db = get_db()
-    ph = ','.join('?' * len(client_ids))
-    rows = _rows_to_list(db.execute(
-        f"SELECT * FROM clients WHERE id IN ({ph}) AND user_id=?",
-        [*client_ids, current_user.id],
-    ).fetchall())
-    db.close()
+    result = sb.table('clients').select('*').in_('id', client_ids).eq('quilk_user_id', current_user.id).execute()
+    rows = [_normalize_sb_client(r) for r in (result.data or [])]
     fields = ['company_name', 'name', 'email', 'phone',
               'address_line1', 'address_line2', 'city', 'country', 'notes']
     output = io.StringIO()
@@ -2089,17 +2138,15 @@ def export_selection_clients_csv():
 @app.route('/clients/export_selection', methods=['POST'])
 @login_required
 def export_selection_clients():
-    client_ids = [int(x) for x in request.form.getlist('client_ids') if x.isdigit()]
+    client_ids = request.form.getlist('client_ids')
     if not client_ids:
         return redirect(url_for('clients'))
+    result = sb.table('clients').select('*').in_('id', client_ids).eq('quilk_user_id', current_user.id).execute()
+    clients_rows = [_normalize_sb_client(r) for r in (result.data or [])]
     db = get_db()
     ph = ','.join('?' * len(client_ids))
-    clients_rows = _rows_to_list(db.execute(
-        f"SELECT * FROM clients WHERE id IN ({ph}) AND user_id=?",
-        [*client_ids, current_user.id],
-    ).fetchall())
     docs_rows = _rows_to_list(db.execute(
-        f"SELECT * FROM documents WHERE client_id IN ({ph}) AND user_id=?",
+        f"SELECT * FROM documents WHERE client_uuid IN ({ph}) AND user_id=?",
         [*client_ids, current_user.id],
     ).fetchall())
     db.close()
@@ -2130,12 +2177,17 @@ def export_selection_documents_csv():
     db = get_db()
     ph = ','.join('?' * len(doc_ids))
     rows = _rows_to_list(db.execute(
-        f"SELECT d.*, COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        f" FROM documents d LEFT JOIN clients c ON d.client_id = c.id"
-        f" WHERE d.id IN ({ph}) AND d.user_id=?",
+        f"SELECT * FROM documents WHERE id IN ({ph}) AND user_id=?",
         [*doc_ids, current_user.id],
     ).fetchall())
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    for row in rows:
+        cuuid = row.get('client_uuid')
+        row['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
+
     fields = ['doc_number', 'doc_type', 'invoice_type', 'client_name',
               'date_issued', 'currency', 'subtotal', 'discount', 'tax_amount',
               'amount_due', 'paid_amount', 'status', 'pay_by_date', 'notes']
@@ -2162,15 +2214,14 @@ def export_selection_documents():
         f"SELECT * FROM documents WHERE id IN ({ph}) AND user_id=?",
         [*doc_ids, current_user.id],
     ).fetchall())
-    client_ids = list({d['client_id'] for d in docs_rows if d.get('client_id')})
-    clients_rows = []
-    if client_ids:
-        cph = ','.join('?' * len(client_ids))
-        clients_rows = _rows_to_list(db.execute(
-            f"SELECT * FROM clients WHERE id IN ({cph}) AND user_id=?",
-            [*client_ids, current_user.id],
-        ).fetchall())
     db.close()
+
+    client_uuids = list({d['client_uuid'] for d in docs_rows if d.get('client_uuid')})
+    clients_rows = []
+    if client_uuids:
+        result = sb.table('clients').select('*').in_('id', client_uuids).eq('quilk_user_id', current_user.id).execute()
+        clients_rows = [_normalize_sb_client(r) for r in (result.data or [])]
+
     jobs_map = defaultdict(list)
     for d in docs_rows:
         if d.get('job_id'):
@@ -2199,12 +2250,13 @@ def new_job():
     db = get_db()
     job_id = str(uuid.uuid4())
     job_number = _next_job_number(db, current_user.id)
-    db.execute(
-        "INSERT INTO jobs (job_id, user_id, job_number) VALUES (?, ?, ?)",
-        (job_id, current_user.id, job_number),
-    )
     db.commit()
     db.close()
+    sb.table('gigs').insert({
+        'id': job_id,
+        'quilk_user_id': current_user.id,
+        'job_number': job_number,
+    }).execute()
     return redirect(url_for('job_detail', job_id=job_id))
 
 
@@ -2212,13 +2264,8 @@ def new_job():
 @login_required
 def edit_job_title(job_id):
     title = (request.form.get('job_title') or '').strip() or None
-    db = get_db()
-    db.execute(
-        "UPDATE jobs SET job_title=? WHERE job_id=? AND user_id=?",
-        (title, job_id, current_user.id),
-    )
-    db.commit()
-    db.close()
+    sb.table('gigs').update({'job_title': title})\
+      .eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
     return redirect(url_for('job_detail', job_id=job_id))
 
 
@@ -2226,17 +2273,14 @@ def edit_job_title(job_id):
 @login_required
 def delete_job(job_id):
     """Permanent hard-delete — only allowed on already-discarded jobs."""
-    db = get_db()
-    job_row = db.execute(
-        "SELECT job_id, discarded FROM jobs WHERE job_id=? AND user_id=?",
-        (job_id, current_user.id),
-    ).fetchone()
-    if not job_row:
-        db.close()
+    gig_result = sb.table('gigs').select('id,discarded').eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
+    if not gig_result.data:
         abort(404)
-    if not job_row['discarded']:
-        db.close()
+    gig = gig_result.data[0]
+    if not gig.get('discarded'):
         abort(403)
+
+    db = get_db()
     doc_ids = [r['id'] for r in db.execute(
         "SELECT id FROM documents WHERE job_id=? AND user_id=?",
         (job_id, current_user.id),
@@ -2253,9 +2297,10 @@ def delete_job(job_id):
             f"DELETE FROM documents WHERE id IN ({ph}) AND user_id=?",
             [*doc_ids, current_user.id],
         )
-    db.execute("DELETE FROM jobs WHERE job_id=? AND user_id=?", (job_id, current_user.id))
     db.commit()
     db.close()
+
+    sb.table('gigs').delete().eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
     flash('Job permanently deleted.', 'success')
     return redirect(url_for('discarded_items'))
 
@@ -2266,14 +2311,9 @@ def bulk_discard_jobs():
     job_ids = request.form.getlist('job_ids')
     if not job_ids:
         return redirect(url_for('jobs'))
-    now = datetime.utcnow()
+    now = datetime.utcnow().isoformat()
     jph = ','.join('?' * len(job_ids))
     db = get_db()
-    db.execute(
-        f"UPDATE jobs SET discarded=1, discarded_at=?"
-        f" WHERE job_id IN ({jph}) AND user_id=? AND discarded=0",
-        [now, *job_ids, current_user.id],
-    )
     db.execute(
         f"UPDATE documents SET discarded=1, discarded_at=?, discarded_with_job=1"
         f" WHERE job_id IN ({jph}) AND user_id=? AND discarded=0",
@@ -2281,6 +2321,9 @@ def bulk_discard_jobs():
     )
     db.commit()
     db.close()
+    for jid in job_ids:
+        sb.table('gigs').update({'discarded': True, 'discarded_at': now})\
+          .eq('id', jid).eq('quilk_user_id', current_user.id).eq('discarded', False).execute()
     return redirect(url_for('jobs'))
 
 
@@ -2290,19 +2333,16 @@ def reassign_job(doc_id):
     target_job_id = (request.form.get('target_job_id') or '').strip()
     if not target_job_id:
         return redirect(url_for('document_view', doc_id=doc_id))
-    db = get_db()
-    target = db.execute(
-        "SELECT job_id FROM jobs WHERE job_id=? AND user_id=?",
-        (target_job_id, current_user.id),
-    ).fetchone()
-    if target:
+    result = sb.table('gigs').select('id').eq('id', target_job_id).eq('quilk_user_id', current_user.id).execute()
+    if result.data:
+        db = get_db()
         db.execute(
             "UPDATE documents SET job_id=? WHERE id=? AND user_id=?",
             (target_job_id, doc_id, current_user.id),
         )
         db.commit()
+        db.close()
         flash('Document moved to new job.', 'success')
-    db.close()
     return redirect(url_for('document_view', doc_id=doc_id))
 
 
@@ -2312,25 +2352,24 @@ def export_selection_jobs():
     job_ids = request.form.getlist('job_ids')
     if not job_ids:
         return redirect(url_for('jobs'))
+
+    gigs_result = sb.table('gigs').select('*').in_('id', job_ids).eq('quilk_user_id', current_user.id).execute()
+    jobs_rows = [_normalize_sb_gig(r) for r in (gigs_result.data or [])]
+
     db = get_db()
     jph = ','.join('?' * len(job_ids))
-    jobs_rows = _rows_to_list(db.execute(
-        f"SELECT * FROM jobs WHERE job_id IN ({jph}) AND user_id=?",
-        [*job_ids, current_user.id],
-    ).fetchall())
     docs_rows = _rows_to_list(db.execute(
         f"SELECT * FROM documents WHERE job_id IN ({jph}) AND user_id=?",
         [*job_ids, current_user.id],
     ).fetchall())
-    client_ids = list({d['client_id'] for d in docs_rows if d.get('client_id')})
-    clients_rows = []
-    if client_ids:
-        cph = ','.join('?' * len(client_ids))
-        clients_rows = _rows_to_list(db.execute(
-            f"SELECT * FROM clients WHERE id IN ({cph}) AND user_id=?",
-            [*client_ids, current_user.id],
-        ).fetchall())
     db.close()
+
+    client_uuids = list({d['client_uuid'] for d in docs_rows if d.get('client_uuid')})
+    clients_rows = []
+    if client_uuids:
+        result = sb.table('clients').select('*').in_('id', client_uuids).eq('quilk_user_id', current_user.id).execute()
+        clients_rows = [_normalize_sb_client(r) for r in (result.data or [])]
+
     payload = {
         'quilk_export': '1.0',
         'exported_at': datetime.utcnow().isoformat() + 'Z',
@@ -2350,20 +2389,38 @@ def export_selection_jobs_csv():
     job_ids = request.form.getlist('job_ids')
     if not job_ids:
         return redirect(url_for('jobs'))
+
+    gigs_result = sb.table('gigs').select('*').in_('id', job_ids).eq('quilk_user_id', current_user.id).execute()
+    gigs = [_normalize_sb_gig(r) for r in (gigs_result.data or [])]
+
     db = get_db()
     jph = ','.join('?' * len(job_ids))
-    rows = _rows_to_list(db.execute(
-        f"SELECT j.job_number, j.job_title, j.created_at,"
-        f" COUNT(d.id) as doc_count,"
-        f" COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        f" FROM jobs j"
-        f" LEFT JOIN documents d ON d.job_id = j.job_id"
-        f" LEFT JOIN clients c ON d.client_id = c.id"
-        f" WHERE j.job_id IN ({jph}) AND j.user_id=?"
-        f" GROUP BY j.job_id",
+    all_docs = _rows_to_list(db.execute(
+        f"SELECT * FROM documents WHERE job_id IN ({jph}) AND user_id=?",
         [*job_ids, current_user.id],
     ).fetchall())
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+
+    rows = []
+    for gig in gigs:
+        jid = gig['job_id']
+        job_docs = [d for d in all_docs if d.get('job_id') == jid]
+        anchor = next(
+            (d for d in job_docs if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
+            None,
+        )
+        cuuid = anchor.get('client_uuid') if anchor else None
+        rows.append({
+            'job_number': gig['job_number'],
+            'job_title': gig.get('job_title') or '',
+            'client_name': labels.get(cuuid, '—') if cuuid else '—',
+            'doc_count': len(job_docs),
+            'created_at': gig.get('created_at') or '',
+        })
+
     fields = ['job_number', 'job_title', 'client_name', 'doc_count', 'created_at']
     output = io.StringIO()
     w = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
@@ -2410,20 +2467,14 @@ def discard_document(doc_id):
 @app.route('/jobs/<job_id>/discard', methods=['POST'])
 @login_required
 def discard_job(job_id):
-    db = get_db()
-    row = db.execute(
-        "SELECT job_id FROM jobs WHERE job_id=? AND user_id=? AND discarded=0",
-        (job_id, current_user.id),
-    ).fetchone()
-    if not row:
-        db.close()
+    gig_result = sb.table('gigs').select('id').eq('id', job_id).eq('quilk_user_id', current_user.id).eq('discarded', False).execute()
+    if not gig_result.data:
         abort(404)
     from datetime import datetime as _dt
     now = _dt.utcnow().isoformat()
-    db.execute(
-        "UPDATE jobs SET discarded=1, discarded_at=? WHERE job_id=? AND user_id=?",
-        (now, job_id, current_user.id),
-    )
+    sb.table('gigs').update({'discarded': True, 'discarded_at': now})\
+      .eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
+    db = get_db()
     # Cascade: mark all active docs in this job as discarded-with-job
     db.execute(
         "UPDATE documents SET discarded=1, discarded_at=?, discarded_with_job=1"
@@ -2458,11 +2509,9 @@ def restore_document(doc_id):
 @app.route('/jobs/<job_id>/restore', methods=['POST'])
 @login_required
 def restore_job(job_id):
+    sb.table('gigs').update({'discarded': False, 'discarded_at': None})\
+      .eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
     db = get_db()
-    db.execute(
-        "UPDATE jobs SET discarded=0, discarded_at=NULL WHERE job_id=? AND user_id=?",
-        (job_id, current_user.id),
-    )
     # Cascade-restore only docs that were discarded as part of this job discard
     db.execute(
         "UPDATE documents SET discarded=0, discarded_at=NULL, discarded_with_job=0"
@@ -2480,32 +2529,54 @@ def restore_job(job_id):
 def discarded_items():
     db = get_db()
 
-    # Discarded jobs (with cascade-discarded doc count)
-    discarded_jobs = _rows_to_list(db.execute(
-        "SELECT j.job_id, j.job_number, j.job_title, j.discarded_at,"
-        " COUNT(d.id) AS doc_count"
-        " FROM jobs j"
-        " LEFT JOIN documents d ON d.job_id=j.job_id AND d.discarded_with_job=1"
-        " WHERE j.user_id=? AND j.discarded=1"
-        " GROUP BY j.job_id ORDER BY j.discarded_at DESC",
-        (current_user.id,),
-    ).fetchall())
+    # Discarded gigs from Supabase
+    all_gigs = _sb_gigs_for_user(current_user.id, include_discarded=True)
+    discarded_gig_list = [g for g in all_gigs if g.get('discarded')]
+    discarded_job_ids = [g['job_id'] for g in discarded_gig_list]
+
+    # Doc counts for discarded jobs (cascade-discarded docs)
+    job_doc_counts = {}
+    if discarded_job_ids:
+        jph = ','.join('?' * len(discarded_job_ids))
+        count_rows = _rows_to_list(db.execute(
+            f"SELECT job_id, COUNT(*) AS doc_count FROM documents"
+            f" WHERE job_id IN ({jph}) AND user_id=? AND discarded_with_job=1"
+            f" GROUP BY job_id",
+            [*discarded_job_ids, current_user.id],
+        ).fetchall())
+        job_doc_counts = {r['job_id']: r['doc_count'] for r in count_rows}
+
+    discarded_jobs = []
+    for g in discarded_gig_list:
+        discarded_jobs.append({
+            'job_id': g['job_id'],
+            'job_number': g['job_number'],
+            'job_title': g['job_title'],
+            'discarded_at': g['discarded_at'],
+            'doc_count': job_doc_counts.get(g['job_id'], 0),
+        })
+    discarded_jobs.sort(key=lambda j: j.get('discarded_at') or '', reverse=True)
 
     # Discarded documents NOT cascade-discarded with a job (individually discarded)
-    discarded_docs = _rows_to_list(db.execute(
-        "SELECT d.id, d.doc_number, d.doc_type, d.invoice_type, d.status,"
-        " d.discarded_at, d.job_id,"
-        " COALESCE(NULLIF(c.company_name,''), c.name) AS client_name"
-        " FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
-        " WHERE d.user_id=? AND d.discarded=1 AND d.discarded_with_job=0"
-        " ORDER BY d.discarded_at DESC",
+    discarded_docs_raw = _rows_to_list(db.execute(
+        "SELECT id, doc_number, doc_type, invoice_type, status,"
+        " discarded_at, job_id, client_uuid"
+        " FROM documents"
+        " WHERE user_id=? AND discarded=1 AND discarded_with_job=0"
+        " ORDER BY discarded_at DESC",
         (current_user.id,),
     ).fetchall())
-
     db.close()
+
+    client_map = _sb_client_map(current_user.id, include_discarded=True)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    for d in discarded_docs_raw:
+        cuuid = d.get('client_uuid')
+        d['client_name'] = labels.get(cuuid, '—') if cuuid else '—'
+
     return render_template('discarded.html',
                            discarded_jobs=discarded_jobs,
-                           discarded_docs=discarded_docs)
+                           discarded_docs=discarded_docs_raw)
 
 
 # ---------------------------------------------------------------------------

@@ -45,21 +45,6 @@ def init_db():
             created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS clients (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id        INTEGER REFERENCES users(id),
-            company_name   TEXT,
-            name           TEXT NOT NULL,
-            email          TEXT,
-            phone          TEXT,
-            address_line1  TEXT,
-            address_line2  TEXT,
-            city           TEXT,
-            country        TEXT,
-            notes          TEXT,
-            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
         CREATE TABLE IF NOT EXISTS client_templates (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id           INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
@@ -132,15 +117,6 @@ def init_db():
             UNIQUE(user_id, doc_type)
         );
 
-        CREATE TABLE IF NOT EXISTS jobs (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            job_id     TEXT NOT NULL UNIQUE,
-            user_id    INTEGER NOT NULL REFERENCES users(id),
-            job_number TEXT NOT NULL,
-            job_title  TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
         CREATE TABLE IF NOT EXISTS job_counter (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id     INTEGER NOT NULL REFERENCES users(id) UNIQUE,
@@ -148,11 +124,15 @@ def init_db():
         );
     """)
 
-    # Safely add columns that may be missing on pre-migration installs
+    # Safely add columns that may be missing on pre-migration installs.
+    # Uses try/except so callers for tables now in Supabase silently no-op on fresh installs.
     def _add_col(table, col, definition):
         cols = [r[1] for r in c.execute(f"PRAGMA table_info({table})").fetchall()]
         if col not in cols:
-            c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+            try:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
 
     _add_col('documents', 'pay_by_date', 'TEXT')
     _add_col('documents', 'source_document_id',
@@ -172,6 +152,10 @@ def init_db():
     _add_col('users', 'job_prefix',          "TEXT NOT NULL DEFAULT 'JOB'")
     _add_col('clients', 'discarded',    'INTEGER NOT NULL DEFAULT 0')
     _add_col('clients', 'discarded_at', 'TIMESTAMP')
+    _add_col('jobs', 'discarded',       'INTEGER NOT NULL DEFAULT 0')
+    _add_col('jobs', 'discarded_at',    'TIMESTAMP')
+    _add_col('documents', 'client_uuid',        'TEXT')
+    _add_col('client_templates', 'client_uuid', 'TEXT')
 
     c.execute("UPDATE documents SET status='pending' WHERE status IN ('draft', 'issued')")
 
