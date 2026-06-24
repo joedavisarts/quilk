@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader
+from markupsafe import Markup
 from weasyprint import HTML
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates', 'pdf')
@@ -54,6 +55,38 @@ _EMOJI_RE = re.compile(
 
 def _strip_emoji(text: str) -> str:
     return _EMOJI_RE.sub('', text or '').strip()
+
+
+_SVG_FLAGS = {
+    'jm': '<svg width="26" height="18" viewBox="0 0 80 56" style="vertical-align:middle;margin-right:4px;border-radius:2px;border:0.5px solid #ccc;" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="jm-{i}"><rect width="80" height="56" rx="2"/></clipPath></defs><g clip-path="url(#jm-{i})"><rect width="80" height="56" fill="#000000"/><polygon points="0,0 80,0 40,28" fill="#009B3A"/><polygon points="0,56 80,56 40,28" fill="#009B3A"/><line x1="0" y1="0" x2="80" y2="56" stroke="#FED100" stroke-width="10"/><line x1="80" y1="0" x2="0" y2="56" stroke="#FED100" stroke-width="10"/></g></svg>',
+    'uk': '<svg width="26" height="18" viewBox="0 0 80 56" style="vertical-align:middle;margin-right:4px;border-radius:2px;border:0.5px solid #ccc;" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="uk-{i}"><rect width="80" height="56" rx="2"/></clipPath></defs><g clip-path="url(#uk-{i})"><rect width="80" height="56" fill="#00247D"/><line x1="0" y1="0" x2="80" y2="56" stroke="#FFFFFF" stroke-width="12"/><line x1="80" y1="0" x2="0" y2="56" stroke="#FFFFFF" stroke-width="12"/><line x1="0" y1="0" x2="80" y2="56" stroke="#CF142B" stroke-width="5"/><line x1="80" y1="0" x2="0" y2="56" stroke="#CF142B" stroke-width="5"/><rect x="0" y="20" width="80" height="16" fill="#FFFFFF"/><rect x="30" y="0" width="20" height="56" fill="#FFFFFF"/><rect x="0" y="22" width="80" height="12" fill="#CF142B"/><rect x="32" y="0" width="16" height="56" fill="#CF142B"/></g></svg>',
+    'us': '<svg width="26" height="18" viewBox="0 0 80 56" style="vertical-align:middle;margin-right:4px;border-radius:2px;border:0.5px solid #ccc;" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="us-{i}"><rect width="80" height="56" rx="2"/></clipPath></defs><g clip-path="url(#us-{i})"><rect width="80" height="56" fill="#FFFFFF"/><rect x="0" y="2" width="80" height="7" fill="#B22234"/><rect x="0" y="16" width="80" height="7" fill="#B22234"/><rect x="0" y="30" width="80" height="7" fill="#B22234"/><rect x="0" y="44" width="80" height="7" fill="#B22234"/><rect x="0" y="0" width="32" height="30" fill="#3C3B6E"/><circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="14" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="22" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="10" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="18" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="26" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="6" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="14" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="22" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="10" cy="23" r="1.8" fill="#FFFFFF"/><circle cx="18" cy="23" r="1.8" fill="#FFFFFF"/><circle cx="26" cy="23" r="1.8" fill="#FFFFFF"/></g></svg>',
+}
+
+_GROUP_FLAGS = {
+    'Bank Transfer (Jamaica)':          ['jm'],
+    'Bank Transfer (England)':          ['uk'],
+    'Zelle (United States)':            ['us'],
+    'Venmo (America)':                  ['us'],
+    'PayPal (Worldwide)':               ['jm', 'uk', 'us'],
+    'Bank Transfer (Worldwide, US Bank)': ['jm', 'uk', 'us'],
+}
+
+
+def _build_flag_svgs(payment_methods: list) -> dict:
+    """Return {group_name: [Markup(svg), ...]} with unique clipPath IDs per instance."""
+    result = {}
+    counter = 0
+    for group in payment_methods:
+        name = group.get('group', '')
+        flag_keys = _GROUP_FLAGS.get(name, [])
+        svgs = []
+        for key in flag_keys:
+            svgs.append(Markup(_SVG_FLAGS[key].replace('{i}', str(counter))))
+            counter += 1
+        if svgs:
+            result[name] = svgs
+    return result
 
 
 def _bank_rows(details_str):
@@ -106,6 +139,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
             logo_b64=_logo_b64_for_file(user.get('logo_filename')),
             logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
             user=user_ctx,
+            flag_svgs=_build_flag_svgs(payment_methods),
         )
 
     pdf_bytes = io.BytesIO()

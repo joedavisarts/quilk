@@ -134,7 +134,7 @@
     <h3>Methods of Payment</h3>
 
     {% for group in user.payment_methods %}
-    <div class="payment-group-label">{{ group.group }}</div>
+    <div class="payment-group-label">{% if flag_svgs and group.group in flag_svgs %}{% for svg in flag_svgs[group.group] %}{{ svg }}{% endfor %}{% endif %}{{ group.group }}</div>
     <hr class="payment-group-rule" />
     <div class="payment-grid" {% if not loop.last %}style="margin-bottom:14pt;"{% endif %}>
       {% for item in group['items'] %}
