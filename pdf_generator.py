@@ -74,18 +74,19 @@ _GROUP_FLAGS = {
 
 
 def _build_flag_svgs(payment_methods: list) -> dict:
-    """Return {group_name: [Markup(svg), ...]} with unique clipPath IDs per instance."""
+    """Return {item_label: [Markup(svg), ...]} with unique IDs per instance."""
     result = {}
     counter = 0
     for group in payment_methods:
-        name = group.get('group', '')
-        flag_keys = _GROUP_FLAGS.get(name, [])
-        svgs = []
-        for key in flag_keys:
-            svgs.append(Markup(_SVG_FLAGS[key].replace('{i}', str(counter))))
-            counter += 1
-        if svgs:
-            result[name] = svgs
+        for item in group.get('items', []):
+            label = item.get('label', '')
+            flag_keys = _GROUP_FLAGS.get(label, [])
+            svgs = []
+            for key in flag_keys:
+                svgs.append(Markup(_SVG_FLAGS[key].replace('{i}', str(counter))))
+                counter += 1
+            if svgs:
+                result[label] = svgs
     return result
 
 
