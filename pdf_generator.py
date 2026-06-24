@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import re
 from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader
@@ -43,6 +44,18 @@ def _nl2br(s):
     return str(s).replace('\n', '<br>')
 
 
+_EMOJI_RE = re.compile(
+    "[\U0001F1E0-\U0001F1FF"   # regional indicators (flags)
+    "\U0001F300-\U0001F9FF"    # misc symbols, pictographs, emoticons, transport
+    "☀-➿]+",         # misc symbols, dingbats
+    flags=re.UNICODE,
+)
+
+
+def _strip_emoji(text: str) -> str:
+    return _EMOJI_RE.sub('', text or '').strip()
+
+
 def _bank_rows(details_str):
     """Parse a payment details string into (label, value) tuples for bankrow rendering."""
     rows = []
@@ -66,7 +79,11 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     env.filters['nl2br'] = _nl2br
 
     user_ctx = dict(user)
-    user_ctx['payment_methods'] = json.loads(user.get('payment_methods_json') or '[]')
+    payment_methods = json.loads(user.get('payment_methods_json') or '[]')
+    for group in payment_methods:
+        if 'group' in group:
+            group['group'] = _strip_emoji(group['group'])
+    user_ctx['payment_methods'] = payment_methods
     user_ctx['social_links'] = json.loads(user.get('social_links_json') or '[]')
 
     if user.get('username') == 'aureum':
