@@ -139,7 +139,7 @@
     <div class="payment-grid" {% if not loop.last %}style="margin-bottom:14pt;"{% endif %}>
       {% for item in group['items'] %}
       <div class="payment-item">
-        <h4>{% if flag_svgs and item.label in flag_svgs %}{% for svg in flag_svgs[item.label] %}{{ svg }}{% endfor %}{% endif %}{{ item.label }}</h4>
+        <h4>{% if flag_svgs and item.label in flag_svgs %}{% for svg in flag_svgs[item.label] %}<span style="margin-right:3px;display:inline-block;">{{ svg }}</span>{% endfor %}{% endif %}{{ item.label }}</h4>
         <p>{{ item.details | nl2br | safe }}</p>
       </div>
       {% endfor %}
