@@ -1413,7 +1413,14 @@ def _job_overview(job_docs, anchor, job_currency=None):
     else:
         currency = anchor.get('currency', 'USD')
 
-    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
+    # Use the most recent active (non-voided) root quote/invoice for project_total.
+    # Fall back to the passed-in anchor only if none exists (e.g. all docs are voided).
+    active_anchor = next(
+        (d for d in sorted(active, key=lambda d: d.get('created_at') or '', reverse=True)
+         if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
+        anchor,
+    )
+    project_total = (active_anchor['subtotal'] or 0) - (active_anchor['discount'] or 0)
 
     # Invoices that are children of the anchor (not the anchor itself)
     amount_billed = sum(
@@ -1433,7 +1440,7 @@ def _job_overview(job_docs, anchor, job_currency=None):
         'project_total': project_total,
         'amount_billed': amount_billed,
         'amount_paid': amount_paid,
-        'balance_outstanding': project_total - amount_paid,
+        'balance_outstanding': amount_billed - amount_paid,
         'voided_received': voided_received,
     }
 
