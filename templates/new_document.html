@@ -18,6 +18,29 @@
     <div class="form-card">
       <h2 class="card-title">Client</h2>
 
+      {% if job_clients and job_clients|length == 1 %}
+      <div class="field">
+        <label>Client</label>
+        <select name="client_id" id="client_select">
+          <option value="">— Choose client —</option>
+          {% for c in clients %}
+          <option value="{{ c.id }}"{% if c.id == job_clients[0].id %} selected{% endif %}>{{ c.display_name }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">Pre-filled from job — change if needed</span>
+      </div>
+      {% elif job_clients and job_clients|length > 1 %}
+      <div class="field">
+        <label>Client</label>
+        <select name="client_id" id="client_select">
+          <option value="">— Choose client —</option>
+          {% for c in job_clients %}
+          <option value="{{ c.id }}">{{ c.display_name }}</option>
+          {% endfor %}
+        </select>
+        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">Showing {{ job_clients|length }} clients linked to this job</span>
+      </div>
+      {% else %}
       <div class="field">
         <label>Select Existing Client</label>
         <select name="client_id" id="client_select">
@@ -27,6 +50,7 @@
           {% endfor %}
         </select>
       </div>
+      {% endif %}
 
       <div id="template-row" class="field hidden">
         <label>Load Template</label>
@@ -89,11 +113,11 @@
         <div class="field">
           <label>Currency</label>
           <select name="currency" id="currency-select">
-            <option value="USD">USD</option>
-            <option value="JMD">JMD</option>
-            <option value="GBP">GBP</option>
-            <option value="EUR">EUR</option>
-            <option value="CAD">CAD</option>
+            <option value="USD"{% if not prefill_currency or prefill_currency == 'USD' %} selected{% endif %}>USD</option>
+            <option value="JMD"{% if prefill_currency == 'JMD' %} selected{% endif %}>JMD</option>
+            <option value="GBP"{% if prefill_currency == 'GBP' %} selected{% endif %}>GBP</option>
+            <option value="EUR"{% if prefill_currency == 'EUR' %} selected{% endif %}>EUR</option>
+            <option value="CAD"{% if prefill_currency == 'CAD' %} selected{% endif %}>CAD</option>
           </select>
         </div>
       </div>

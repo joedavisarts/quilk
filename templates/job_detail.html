@@ -30,24 +30,52 @@
 </div>
 {% endif %}
 
-{# ── Edit Title modal ───────────────────────────────────────────────────── #}
-<div class="modal-overlay hidden" id="edit-title-modal">
-  <div class="modal-card" style="max-width:420px;padding:0;">
+{# ── Edit Job Settings modal ─────────────────────────────────────────────── #}
+<div class="modal-overlay hidden" id="edit-job-modal">
+  <div class="modal-card" style="max-width:480px;padding:0;">
     <div class="modal-header">
-      <h3>Edit Job Title</h3>
-      <button class="modal-close" onclick="document.getElementById('edit-title-modal').classList.add('hidden')">&times;</button>
+      <h3>Job Settings</h3>
+      <button class="modal-close" onclick="document.getElementById('edit-job-modal').classList.add('hidden')">&times;</button>
     </div>
     <div style="padding:24px;">
-      <form method="POST" action="{{ url_for('edit_job_title', job_id=job_id) }}">
-        <div class="form-group">
-          <label class="form-label">Job Title <span style="color:var(--text-muted);font-size:12px;">(optional — leave blank to use job number)</span></label>
+      <form method="POST" action="{{ url_for('edit_job_settings', job_id=job_id) }}">
+
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label">Job Title <span style="color:var(--text-muted);font-size:12px;">(optional)</span></label>
           <input type="text" name="job_title" class="form-control" id="edit-title-input"
                  value="{{ job_title or '' }}"
                  placeholder="e.g. Studio Recording Session, Album Mix, etc.">
         </div>
+
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label">Currency <span style="color:var(--text-muted);font-size:12px;">(optional — infers from documents if blank)</span></label>
+          <select name="job_currency" class="form-control">
+            <option value="">— Infer from documents —</option>
+            <option value="JMD"{% if job_currency == 'JMD' %} selected{% endif %}>JMD</option>
+            <option value="USD"{% if job_currency == 'USD' %} selected{% endif %}>USD</option>
+            <option value="GBP"{% if job_currency == 'GBP' %} selected{% endif %}>GBP</option>
+          </select>
+        </div>
+
+        {% if all_clients %}
+        <div class="form-group" style="margin-bottom:18px;">
+          <label class="form-label">Clients</label>
+          <div style="border:1px solid var(--border);border-radius:6px;max-height:190px;overflow-y:auto;padding:6px 10px;">
+            {% for c in all_clients %}
+            <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:14px;">
+              <input type="checkbox" name="job_client_uuids" value="{{ c.id }}"
+                     {% if c.id in job_client_uuids %}checked{% endif %}>
+              {{ c.display_name }}
+            </label>
+            {% endfor %}
+          </div>
+          <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">Check all clients involved in this job</span>
+        </div>
+        {% endif %}
+
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;">
-          <button type="button" class="btn btn-outline" onclick="document.getElementById('edit-title-modal').classList.add('hidden')">Cancel</button>
-          <button type="submit" class="btn btn-gold">Save Title</button>
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('edit-job-modal').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn btn-gold">Save</button>
         </div>
       </form>
     </div>
@@ -98,7 +126,7 @@
     <a href="{{ url_for('client_detail', client_id=client.id) }}" class="btn btn-outline">View Client</a>
     {% endif %}
     {% if job_meta %}
-    <button type="button" class="btn btn-outline" onclick="openEditTitle()">Edit Title</button>
+    <button type="button" class="btn btn-outline" onclick="openEditJob()">Edit Job</button>
     <button type="button" class="btn btn-outline" style="border-color:#888;color:#888;"
             onclick="document.getElementById('discard-job-modal').classList.remove('hidden')">Discard Job</button>
     {% endif %}
@@ -227,12 +255,12 @@
 
 {% block scripts %}
 <script>
-// ---- Edit title modal ----
-function openEditTitle() {
-  document.getElementById('edit-title-modal').classList.remove('hidden');
+// ---- Edit Job Settings modal ----
+function openEditJob() {
+  document.getElementById('edit-job-modal').classList.remove('hidden');
   setTimeout(() => document.getElementById('edit-title-input').focus(), 50);
 }
-document.getElementById('edit-title-modal')?.addEventListener('click', function(e) {
+document.getElementById('edit-job-modal')?.addEventListener('click', function(e) {
   if (e.target === this) this.classList.add('hidden');
 });
 

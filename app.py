@@ -230,14 +230,26 @@ def _normalize_sb_gig(row):
     """Convert Supabase gigs row to Quilk internal format (matches SQLite jobs shape)."""
     if not row:
         return None
+    raw_uuids = row.get('job_client_uuids')
+    if isinstance(raw_uuids, str):
+        try:
+            parsed_uuids = json.loads(raw_uuids)
+        except (json.JSONDecodeError, TypeError):
+            parsed_uuids = []
+    elif isinstance(raw_uuids, list):
+        parsed_uuids = raw_uuids
+    else:
+        parsed_uuids = []
     return {
-        'job_id':     row.get('id'),
-        'job_number': row.get('job_number', ''),
-        'job_title':  row.get('job_title'),
-        'created_at': row.get('created_at'),
-        'discarded':  row.get('discarded', False),
-        'discarded_at': row.get('discarded_at'),
-        'user_id':    row.get('quilk_user_id'),
+        'job_id':           row.get('id'),
+        'job_number':       row.get('job_number', ''),
+        'job_title':        row.get('job_title'),
+        'created_at':       row.get('created_at'),
+        'discarded':        row.get('discarded', False),
+        'discarded_at':     row.get('discarded_at'),
+        'user_id':          row.get('quilk_user_id'),
+        'job_currency':     row.get('job_currency'),
+        'job_client_uuids': parsed_uuids,
     }
 
 
@@ -838,11 +850,36 @@ def new_document(doc_type):
     for c in clients:
         c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '')
     clients.sort(key=lambda c: (c.get('display_name') or '').lower())
+
+    prefill_job_id = request.args.get('job_id', '')
+    job_clients = []
+    prefill_currency = None
+    if prefill_job_id:
+        gig_res = sb.table('gigs').select('job_client_uuids,job_currency')\
+            .eq('id', prefill_job_id).eq('quilk_user_id', current_user.id).execute()
+        if gig_res.data:
+            g = gig_res.data[0]
+            prefill_currency = g.get('job_currency')
+            raw = g.get('job_client_uuids')
+            if isinstance(raw, str):
+                try:
+                    uuids = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    uuids = []
+            elif isinstance(raw, list):
+                uuids = raw
+            else:
+                uuids = []
+            clients_by_id = {c['id']: c for c in clients}
+            job_clients = [clients_by_id[u] for u in uuids if u in clients_by_id]
+
     db.close()
     today = date.today().isoformat()
     return render_template('new_document.html', doc_type=doc_type,
                            clients=clients, today=today,
-                           prefill_job_id=request.args.get('job_id', ''))
+                           prefill_job_id=prefill_job_id,
+                           job_clients=job_clients,
+                           prefill_currency=prefill_currency)
 
 
 # ---------------------------------------------------------------------------
@@ -1234,6 +1271,8 @@ def job_detail(job_id):
     job_number = job_row.get('job_number') if job_row else None
     job_title = job_row.get('job_title') if job_row else None
     display_name = job_title or job_number or job_id[:8]
+    job_currency = job_row.get('job_currency') if job_row else None
+    job_client_uuids = (job_row.get('job_client_uuids') or []) if job_row else []
 
     docs = _rows_to_list(db.execute(
         "SELECT * FROM documents"
@@ -1268,7 +1307,7 @@ def job_detail(job_id):
     if anchor and anchor.get('client_uuid'):
         client = client_map.get(anchor['client_uuid'])
 
-    overview = _job_overview(docs, anchor) if anchor else None
+    overview = _job_overview(docs, anchor, job_currency=job_currency) if anchor else None
 
     # Other jobs for reassignment dropdown
     other_gigs = _sb_gigs_for_user(current_user.id)
@@ -1276,6 +1315,16 @@ def job_detail(job_id):
         {'job_id': g['job_id'], 'job_number': g['job_number'], 'job_title': g['job_title']}
         for g in other_gigs if g['job_id'] != job_id
     ]
+
+    # All active clients for job settings modal
+    all_clients = sorted(
+        [
+            dict(c, display_name=labels.get(c['id'], c.get('company_name') or c.get('name') or ''))
+            for c in client_map.values()
+            if not c.get('discarded')
+        ],
+        key=lambda c: c['display_name'].lower(),
+    )
 
     db.close()
     return render_template('job_detail.html',
@@ -1288,7 +1337,10 @@ def job_detail(job_id):
                            client=client,
                            overview=overview,
                            anchor=anchor,
-                           other_jobs=other_jobs)
+                           other_jobs=other_jobs,
+                           job_currency=job_currency,
+                           job_client_uuids=job_client_uuids,
+                           all_clients=all_clients)
 
 
 # ---------------------------------------------------------------------------
@@ -1345,15 +1397,23 @@ def _job_capabilities(job_docs, anchor_id):
     return not has_paid_deposit, has_paid_deposit
 
 
-def _job_overview(job_docs, anchor):
+def _job_overview(job_docs, anchor, job_currency=None):
     """Compute job money overview dict from the full job document list."""
     if not anchor:
         return None
-    currency = anchor.get('currency', 'USD')
-    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     active = [d for d in job_docs if not d.get('voided')]
     voided = [d for d in job_docs if d.get('voided')]
+
+    if job_currency:
+        currency = job_currency
+    elif active:
+        most_recent = max(active, key=lambda d: d.get('created_at') or '')
+        currency = most_recent.get('currency', 'USD')
+    else:
+        currency = anchor.get('currency', 'USD')
+
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     # Invoices that are children of the anchor (not the anchor itself)
     amount_billed = sum(
@@ -1436,6 +1496,19 @@ def _sync_gig_financials(db, job_id, user_id):
             'amount_paid':        overview['amount_paid'],
             'amount_outstanding': overview['balance_outstanding'],
         }).eq('id', job_id).eq('quilk_user_id', user_id).execute()
+    except Exception:
+        pass
+
+
+def _sync_gig_metadata(db, job_id, user_id, job_currency, client_uuids):
+    """Sync job currency and client list to SQLite jobs table (no-op if row doesn't exist)."""
+    try:
+        db.execute(
+            "UPDATE jobs SET job_currency=?, job_client_uuids=?"
+            " WHERE job_id=? AND user_id=?",
+            (job_currency, json.dumps(client_uuids) if client_uuids else None, job_id, user_id),
+        )
+        db.commit()
     except Exception:
         pass
 
@@ -2334,6 +2407,27 @@ def edit_job_title(job_id):
     title = (request.form.get('job_title') or '').strip() or None
     sb.table('gigs').update({'job_title': title})\
       .eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
+    return redirect(url_for('job_detail', job_id=job_id))
+
+
+@app.route('/jobs/<job_id>/settings', methods=['POST'])
+@login_required
+def edit_job_settings(job_id):
+    title = (request.form.get('job_title') or '').strip() or None
+    currency = request.form.get('job_currency') or None
+    client_uuids = request.form.getlist('job_client_uuids')
+
+    sb.table('gigs').update({
+        'job_title':        title,
+        'job_currency':     currency,
+        'job_client_uuids': client_uuids or None,
+    }).eq('id', job_id).eq('quilk_user_id', current_user.id).execute()
+
+    db = get_db()
+    _sync_gig_metadata(db, job_id, current_user.id, currency, client_uuids)
+    db.close()
+
+    flash('Job settings saved.', 'success')
     return redirect(url_for('job_detail', job_id=job_id))
 
 

@@ -154,6 +154,8 @@ def init_db():
     _add_col('clients', 'discarded_at', 'TIMESTAMP')
     _add_col('jobs', 'discarded',       'INTEGER NOT NULL DEFAULT 0')
     _add_col('jobs', 'discarded_at',    'TIMESTAMP')
+    _add_col('jobs', 'job_currency',    'TEXT')
+    _add_col('jobs', 'job_client_uuids', 'TEXT')
     _add_col('documents', 'client_uuid',        'TEXT')
     _add_col('client_templates', 'client_uuid', 'TEXT')
 
