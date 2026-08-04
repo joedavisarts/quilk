@@ -30,7 +30,12 @@
   <div class="bill-to-section">
     <div class="bill-to">
       <h3>Bill To</h3>
-      <p><strong>{{ client.name or '' }}</strong></p>
+      {% if client.company_name %}
+        <p><strong>{{ client.company_name }}</strong></p>
+        <p>{{ client.name or '' }}</p>
+      {% else %}
+        <p><strong>{{ client.name or '' }}</strong></p>
+      {% endif %}
       {% if client.email %}<p>{{ client.email }}</p>{% endif %}
       {% if client.phone %}<p>{{ client.phone }}</p>{% endif %}
       {% if client.address_line1 %}<p>{{ client.address_line1 }}</p>{% endif %}

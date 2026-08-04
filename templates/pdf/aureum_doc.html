@@ -66,8 +66,8 @@ table.items td { padding: 13px 14px; border-bottom: 0.5px solid #eee; }
     <div class="meta">
       <div>
         <div class="label">BILL TO</div>
-        {% if client.company_name %}
-          <div class="client">{{ client.company_name }}</div>
+        {% if client.artist_company_name %}
+          <div class="client">{{ client.artist_company_name }}</div>
           {% if client.name %}<div class="muted">{{ client.name }}</div>{% endif %}
         {% else %}
           <div class="client">{{ client.name or '' }}</div>
