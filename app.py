@@ -2900,18 +2900,33 @@ def analytics():
     top_clients = sorted(client_revenue.items(), key=lambda x: x[1], reverse=True)[:8]
 
     # --- Currency split ---
+    # Per-currency breakdowns — must be NATIVE amounts per currency (not JMD-converted).
+    # The JS sumByCurrency() handles FX conversion itself using the FX table.
+    def _native_amt(doc):
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        pt = doc.get('project_total') or 0
+        return pt if pt else (doc.get('subtotal') or 0)
+
+    def _native_collected(doc):
+        if doc.get('status') != 'paid':
+            return 0
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        pt = doc.get('project_total') or 0
+        return pt if pt else (doc.get('subtotal') or 0)
+
     currency_totals = defaultdict(float)
     for d in invoices:
-        currency_totals[d.get('currency','USD')] += _invoice_collected(d)
+        currency_totals[d.get('currency', 'JMD')] += _native_collected(d)
 
-    # Per-currency breakdowns for accurate FX conversion in JS
     collected_by_currency = defaultdict(float)
     for d in invoices:
-        collected_by_currency[d.get('currency','USD')] += _invoice_collected(d)
+        collected_by_currency[d.get('currency', 'JMD')] += _native_collected(d)
 
     invoiced_by_currency = defaultdict(float)
     for d in invoices:
-        invoiced_by_currency[d.get('currency','USD')] += _invoice_amt(d)
+        invoiced_by_currency[d.get('currency', 'JMD')] += _native_amt(d)
 
     # --- Doc pipeline (all time) ---
     pipeline = {
