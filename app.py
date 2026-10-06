@@ -2821,13 +2821,16 @@ def analytics():
 
     # Outstanding from gigs
     gigs = _sb_gigs_for_user(uid, include_discarded=False)
-    # Outstanding: sum amount_due from sent/pending non-balance invoices (not from gigs, which may be stale)
+    # Outstanding: sum amount_due from sent/pending non-balance invoices, converted to JMD
+    _FX = {'USD': 1, 'JMD': 158.0, 'GBP': 0.787, 'EUR': 0.918, 'CAD': 1.353}
     def _invoice_outstanding(doc):
         if doc.get('invoice_type') == 'balance':
             return 0
         if doc.get('status') not in ('sent', 'pending'):
             return 0
-        return doc.get('amount_due') or 0
+        amt = doc.get('amount_due') or 0
+        cur = doc.get('currency') or 'JMD'
+        return (amt / _FX.get(cur, 1)) * 158.0
     total_outstanding = sum(_invoice_outstanding(d) for d in invoices)
 
     avg_invoice = (total_invoiced / len(invoices)) if invoices else 0
