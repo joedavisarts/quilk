@@ -2864,8 +2864,10 @@ def analytics():
     now = datetime.datetime.utcnow()
     months = []
     for i in range(12, -1, -1):
-        m = (now.month - i - 1) % 12 + 1
-        y = now.year - ((now.month - i - 1) // 12)
+        # Step back i months from current month using safe arithmetic
+        total_months = now.year * 12 + (now.month - 1) - i
+        y = total_months // 12
+        m = total_months % 12 + 1
         months.append((y, m))
 
     monthly_collected = defaultdict(float)

@@ -309,7 +309,18 @@ const revenueChart = new Chart(document.getElementById('revenueChart'), {
     interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false } },
     scales: {
-      x: { grid: { color: '#1e1e1e' }, ticks: { maxTicksLimit: 6 } },
+      x: {
+        grid: { color: '#1e1e1e' },
+        ticks: {
+          maxTicksLimit: 6, maxRotation: 0, autoSkip: true,
+          callback: function(val, idx) {
+            const label = this.getLabelForValue(val);
+            const [y, m] = label.split('-');
+            const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1];
+            return mon + ' \'' + y.slice(2);
+          }
+        }
+      },
       y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency] + v.toLocaleString() } }
     }
   }
@@ -546,6 +557,7 @@ updateTiles();
   /* Stack body grid: charts then sidebar below */
   .an-body-grid {
     grid-template-columns: 1fr;
+    min-width: 0;
   }
   .an-sidebar {
     position: static;
@@ -553,6 +565,12 @@ updateTiles();
   /* Full-width 2-col sub-row → single col */
   .an-two-col {
     grid-template-columns: 1fr;
+  }
+  /* Prevent charts from overflowing on mobile */
+  .an-charts-col, .an-card, .an-chart-wrap {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
 }
 </style>
