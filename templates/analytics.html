@@ -2,10 +2,21 @@
 {% block title %}Analytics — Quilk{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
   <div>
     <h1>Analytics</h1>
     <span class="page-sub">your numbers, all in one place</span>
+  </div>
+  <!-- ── CURRENCY CONVERTER ── -->
+  <div class="an-currency-wrap">
+    <label class="an-currency-label">View in</label>
+    <select id="currencySelect" class="an-currency-select" onchange="setCurrency(this.value)">
+      <option value="USD">USD</option>
+      <option value="JMD">JMD</option>
+      <option value="GBP">GBP</option>
+      <option value="EUR">EUR</option>
+      <option value="CAD">CAD</option>
+    </select>
   </div>
 </div>
 
@@ -17,7 +28,7 @@
     </div>
     <div class="an-stat-body">
       <div class="an-stat-label">total collected</div>
-      <div class="an-stat-value">${{ "%.0f"|format(total_collected) }}</div>
+      <div class="an-stat-value" id="tile-collected">—</div>
       <div class="an-stat-sub">{{ doc_counts.receipt }} receipt{{ 's' if doc_counts.receipt != 1 }}</div>
     </div>
   </div>
@@ -28,7 +39,7 @@
     </div>
     <div class="an-stat-body">
       <div class="an-stat-label">total invoiced</div>
-      <div class="an-stat-value">${{ "%.0f"|format(total_invoiced) }}</div>
+      <div class="an-stat-value" id="tile-invoiced">—</div>
       <div class="an-stat-sub">{{ doc_counts.invoice }} invoice{{ 's' if doc_counts.invoice != 1 }}</div>
     </div>
   </div>
@@ -39,7 +50,7 @@
     </div>
     <div class="an-stat-body">
       <div class="an-stat-label">outstanding</div>
-      <div class="an-stat-value {% if total_outstanding > 0 %}an-warn{% endif %}">${{ "%.0f"|format(total_outstanding) }}</div>
+      <div class="an-stat-value {% if total_outstanding > 0 %}an-warn{% endif %}" id="tile-outstanding">—</div>
       <div class="an-stat-sub">across {{ active_jobs }} active job{{ 's' if active_jobs != 1 }}</div>
     </div>
   </div>
@@ -72,7 +83,7 @@
     </div>
     <div class="an-stat-body">
       <div class="an-stat-label">avg invoice value</div>
-      <div class="an-stat-value">${{ "%.0f"|format(avg_invoice) }}</div>
+      <div class="an-stat-value" id="tile-avg-invoice">—</div>
       <div class="an-stat-sub">per invoice</div>
     </div>
   </div>
@@ -93,7 +104,9 @@
           <span class="an-dot" style="background:#27ae60;margin-left:12px"></span><span>invoiced</span>
         </div>
       </div>
-      <canvas id="revenueChart" height="100"></canvas>
+      <div class="an-chart-wrap" style="height:220px;">
+        <canvas id="revenueChart"></canvas>
+      </div>
     </div>
 
     <!-- Two-col row -->
@@ -105,17 +118,19 @@
           <span class="an-card-title">top clients</span>
           <span class="an-card-sub">by collected</span>
         </div>
-        <canvas id="clientChart" height="180"></canvas>
+        <div class="an-chart-wrap" style="height:220px;">
+          <canvas id="clientChart"></canvas>
+        </div>
       </div>
 
       <!-- Currency split -->
       <div class="an-card">
         <div class="an-card-header">
           <span class="an-card-title">currency split</span>
-          <span class="an-card-sub">collected</span>
+          <span class="an-card-sub">collected (raw)</span>
         </div>
-        <div class="an-donut-wrap">
-          <canvas id="currencyChart" height="160"></canvas>
+        <div class="an-chart-wrap" style="height:220px;">
+          <canvas id="currencyChart"></canvas>
         </div>
       </div>
 
@@ -129,14 +144,14 @@
       </div>
       <div class="an-pipeline">
         <div class="an-pipe-step">
-          <div class="an-pipe-val" style="color:#3498db">{{ pipeline.quotes }}</div>
-          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#3498db;width:{% if pipeline.quotes %}{{ [100, pipeline.quotes / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-val" style="color:#9046d6">{{ pipeline.quotes }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#9046d6;width:{% if pipeline.quotes %}{{ [100, pipeline.quotes / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
           <div class="an-pipe-label">quotes</div>
         </div>
         <div class="an-pipe-arrow">→</div>
         <div class="an-pipe-step">
-          <div class="an-pipe-val" style="color:#9046d6">{{ pipeline.invoices }}</div>
-          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#9046d6;width:{% if pipeline.invoices %}{{ [100, pipeline.invoices / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-val" style="color:#e74c3c">{{ pipeline.invoices }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#e74c3c;width:{% if pipeline.invoices %}{{ [100, pipeline.invoices / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
           <div class="an-pipe-label">invoices</div>
         </div>
         <div class="an-pipe-arrow">→</div>
@@ -154,7 +169,9 @@
         <span class="an-card-title">overdue invoices</span>
         <span class="an-card-sub">by age</span>
       </div>
-      <canvas id="overdueChart" height="80"></canvas>
+      <div class="an-chart-wrap" style="height:160px;">
+        <canvas id="overdueChart"></canvas>
+      </div>
     </div>
 
     <!-- Monthly jobs -->
@@ -162,7 +179,9 @@
       <div class="an-card-header">
         <span class="an-card-title">new jobs per month</span>
       </div>
-      <canvas id="jobsChart" height="80"></canvas>
+      <div class="an-chart-wrap" style="height:160px;">
+        <canvas id="jobsChart"></canvas>
+      </div>
     </div>
 
   </div>
@@ -182,7 +201,7 @@
             <div class="an-feed-client">{{ doc.client_name }}</div>
           </div>
           <div class="an-feed-right">
-            <div class="an-feed-amount">${{ "%.0f"|format(doc.amount_due or 0) }}</div>
+            <div class="an-feed-amount">{{ doc.currency or 'USD' }} {{ "%.0f"|format(doc.amount_due or 0) }}</div>
             <div class="an-feed-status an-status-{{ doc.status }}">{{ doc.status }}</div>
           </div>
         </a>
@@ -204,146 +223,170 @@ const ORANGE = '#e67e22';
 const RED    = '#e74c3c';
 const TEAL   = '#1abc9c';
 
+// ── RAW DATA FROM SERVER (all in native/mixed currencies) ──
+const RAW_COLLECTED   = {{ total_collected }};
+const RAW_INVOICED    = {{ total_invoiced }};
+const RAW_OUTSTANDING = {{ total_outstanding }};
+const RAW_AVG_INVOICE = {{ avg_invoice }};
+
+const monthLabels   = {{ month_labels|safe }};
+const rawCollected  = {{ chart_collected|safe }};
+const rawInvoiced   = {{ chart_invoiced|safe }};
+const rawTopClients = {{ top_clients|safe }};
+const currencyData  = {{ currency_totals|safe }};
+const jobData       = {{ chart_jobs|safe }};
+const overdueC      = {{ overdue_counts|safe }};
+const overdueA      = {{ overdue_amounts|safe }};
+
+// ── EXCHANGE RATES (USD base, approximate) ──
+const FX = {
+  USD: 1,
+  JMD: 158.0,
+  GBP: 0.79,
+  EUR: 0.92,
+  CAD: 1.36,
+};
+
+const SYMBOLS = { USD:'$', JMD:'J$', GBP:'£', EUR:'€', CAD:'CA$' };
+
+let currentCurrency = 'USD';
+
+function fx(val) { return val * FX[currentCurrency]; }
+function fmt(val) {
+  const sym = SYMBOLS[currentCurrency] || currentCurrency + ' ';
+  return sym + Math.round(fx(val)).toLocaleString();
+}
+
+// ── TILES ──
+function updateTiles() {
+  document.getElementById('tile-collected').textContent    = fmt(RAW_COLLECTED);
+  document.getElementById('tile-invoiced').textContent     = fmt(RAW_INVOICED);
+  document.getElementById('tile-outstanding').textContent  = fmt(RAW_OUTSTANDING);
+  document.getElementById('tile-avg-invoice').textContent  = fmt(RAW_AVG_INVOICE);
+}
+
+// ── CHARTS ──
 Chart.defaults.color = '#888';
 Chart.defaults.borderColor = '#2a2a2a';
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.font.size = 13;
 
-const monthLabels  = {{ month_labels|safe }};
-const collected    = {{ chart_collected|safe }};
-const invoiced     = {{ chart_invoiced|safe }};
-const topClients   = {{ top_clients|safe }};
-const currencyData = {{ currency_totals|safe }};
-const jobData      = {{ chart_jobs|safe }};
-const overdueC     = {{ overdue_counts|safe }};
-const overdueA     = {{ overdue_amounts|safe }};
-
-// -- Revenue over time --
-new Chart(document.getElementById('revenueChart'), {
+// Revenue over time
+const revenueChart = new Chart(document.getElementById('revenueChart'), {
   type: 'line',
   data: {
     labels: monthLabels,
     datasets: [
       {
         label: 'Collected',
-        data: collected,
+        data: rawCollected.map(v => Math.round(fx(v))),
         borderColor: PURPLE,
         backgroundColor: 'rgba(144,70,214,0.08)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        borderWidth: 2,
+        fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
       },
       {
         label: 'Invoiced',
-        data: invoiced,
+        data: rawInvoiced.map(v => Math.round(fx(v))),
         borderColor: GREEN,
         backgroundColor: 'rgba(39,174,96,0.06)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        borderWidth: 2,
+        fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
         borderDash: [4,3],
       }
     ]
   },
   options: {
-    responsive: true,
+    responsive: true, maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false } },
     scales: {
       x: { grid: { color: '#1e1e1e' }, ticks: { maxTicksLimit: 6 } },
-      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$' + v.toLocaleString() } }
+      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency] + v.toLocaleString() } }
     }
   }
 });
 
-// -- Top clients --
-new Chart(document.getElementById('clientChart'), {
+// Top clients
+const clientChart = new Chart(document.getElementById('clientChart'), {
   type: 'bar',
   data: {
-    labels: topClients.map(c => c[0].length > 16 ? c[0].slice(0,14)+'…' : c[0]),
+    labels: rawTopClients.map(c => c[0].length > 16 ? c[0].slice(0,14)+'…' : c[0]),
     datasets: [{
-      data: topClients.map(c => c[1]),
+      data: rawTopClients.map(c => Math.round(fx(c[1]))),
       backgroundColor: [PURPLE,'#7D2ED1','#a860e8','#c090f0',BLUE,TEAL,GREEN,ORANGE],
-      borderRadius: 4,
-      borderSkipped: false,
+      borderRadius: 4, borderSkipped: false,
     }]
   },
   options: {
-    indexAxis: 'y',
-    responsive: true,
-    plugins: { legend: { display: false },
-      tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}) }}
+    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ' ' + SYMBOLS[currentCurrency] + ctx.raw.toLocaleString() }}
     },
     scales: {
-      x: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$'+v.toLocaleString() } },
+      x: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } },
       y: { grid: { display: false } }
     }
   }
 });
 
-// -- Currency donut --
+// Currency donut (raw amounts, no FX — shows native split)
 const currKeys = Object.keys(currencyData);
 const currVals = currKeys.map(k => currencyData[k]);
-new Chart(document.getElementById('currencyChart'), {
+const currencyChart = new Chart(document.getElementById('currencyChart'), {
   type: 'doughnut',
   data: {
     labels: currKeys,
     datasets: [{
       data: currVals,
       backgroundColor: [PURPLE, GREEN, BLUE, ORANGE, TEAL, RED],
-      borderColor: '#0E0E0E',
-      borderWidth: 3,
-      hoverOffset: 6,
+      borderColor: '#0E0E0E', borderWidth: 3, hoverOffset: 6,
     }]
   },
   options: {
     cutout: '65%',
+    responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { position: 'bottom', labels: { padding: 12, boxWidth: 12 } },
-      tooltip: { callbacks: { label: ctx => ctx.label + ': $' + ctx.raw.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}) }}
+      tooltip: { callbacks: { label: ctx => ctx.label + ': ' + Math.round(ctx.raw).toLocaleString() }}
     }
   }
 });
 
-// -- Overdue bar --
+// Overdue bar
 const overdueLabels = ['0–30 days','31–60 days','61–90 days','90+ days'];
-const overdueAmts   = [overdueA['0-30']||0, overdueA['31-60']||0, overdueA['61-90']||0, overdueA['90+']||0];
-const overdueCnts   = [overdueC['0-30']||0, overdueC['31-60']||0, overdueC['61-90']||0, overdueC['90+']||0];
-new Chart(document.getElementById('overdueChart'), {
+const rawOverdueAmts = [overdueA['0-30']||0, overdueA['31-60']||0, overdueA['61-90']||0, overdueA['90+']||0];
+const overdueCnts    = [overdueC['0-30']||0, overdueC['31-60']||0, overdueC['61-90']||0, overdueC['90+']||0];
+const overdueChart = new Chart(document.getElementById('overdueChart'), {
   type: 'bar',
   data: {
     labels: overdueLabels,
     datasets: [{
       label: 'Amount',
-      data: overdueAmts,
-      backgroundColor: [GREEN, ORANGE, '#e74c3c', '#8e1010'],
+      data: rawOverdueAmts.map(v => Math.round(fx(v))),
+      backgroundColor: [GREEN, ORANGE, RED, '#8e1010'],
       borderRadius: 4,
     }]
   },
   options: {
-    responsive: true,
+    responsive: true, maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
       tooltip: { callbacks: {
         label: (ctx) => {
           const idx = ctx.dataIndex;
-          return ` $${ctx.raw.toLocaleString()} (${overdueCnts[idx]} inv)`;
+          return ' ' + SYMBOLS[currentCurrency] + ctx.raw.toLocaleString() + ' (' + overdueCnts[idx] + ' inv)';
         }
       }}
     },
     scales: {
       x: { grid: { display: false } },
-      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$'+v.toLocaleString() } }
+      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } }
     }
   }
 });
 
-// -- Jobs per month --
-new Chart(document.getElementById('jobsChart'), {
+// Jobs per month
+const jobsChart = new Chart(document.getElementById('jobsChart'), {
   type: 'bar',
   data: {
     labels: monthLabels,
@@ -355,7 +398,7 @@ new Chart(document.getElementById('jobsChart'), {
     }]
   },
   options: {
-    responsive: true,
+    responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
       x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
@@ -363,10 +406,48 @@ new Chart(document.getElementById('jobsChart'), {
     }
   }
 });
+
+// ── CURRENCY SWITCH ──
+function setCurrency(cur) {
+  currentCurrency = cur;
+  updateTiles();
+
+  revenueChart.data.datasets[0].data = rawCollected.map(v => Math.round(fx(v)));
+  revenueChart.data.datasets[1].data = rawInvoiced.map(v => Math.round(fx(v)));
+  revenueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
+  revenueChart.update();
+
+  clientChart.data.datasets[0].data = rawTopClients.map(c => Math.round(fx(c[1])));
+  clientChart.options.scales.x.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
+  clientChart.options.plugins.tooltip.callbacks.label = ctx => ' ' + SYMBOLS[cur] + ctx.raw.toLocaleString();
+  clientChart.update();
+
+  overdueChart.data.datasets[0].data = rawOverdueAmts.map(v => Math.round(fx(v)));
+  overdueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
+  overdueChart.update();
+}
+
+// Init
+updateTiles();
 </script>
 
 <style>
 /* ── ANALYTICS PAGE ── */
+.an-currency-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+.an-currency-label {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-dim); font-weight: 600;
+}
+.an-currency-select {
+  background: #1a1a1a; border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 6px 10px;
+  font-size: 13px; font-family: inherit; cursor: pointer;
+  outline: none; transition: border-color 0.2s;
+}
+.an-currency-select:hover, .an-currency-select:focus { border-color: #9046d6; }
+
 .an-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -378,18 +459,14 @@ new Chart(document.getElementById('jobsChart'), {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 18px 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  display: flex; align-items: center; gap: 16px;
   box-shadow: 0 2px 16px rgba(0,0,0,0.25);
   transition: border-color 0.2s;
 }
 .an-stat:hover { border-color: #9046d6; }
 .an-stat-icon {
-  width: 44px; height: 44px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .an-stat-icon svg { width: 22px; height: 22px; }
 .an-stat-body { min-width: 0; }
@@ -413,29 +490,33 @@ new Chart(document.getElementById('jobsChart'), {
 .an-charts-col { display: flex; flex-direction: column; gap: 16px; }
 .an-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
+/* fixed-height chart wrapper — tames Chart.js responsive sizing */
+.an-chart-wrap {
+  position: relative;
+  width: 100%;
+}
+.an-chart-wrap canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .an-card {
-  background: #111;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px 22px;
+  background: #111; border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px;
 }
 .an-card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
 }
 .an-card-title {
-  font-size: 13px; font-weight: 600;
-  letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);
+  font-size: 13px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);
 }
 .an-card-sub { font-size: 12px; color: var(--text-dim); }
 .an-legend { display: flex; align-items: center; font-size: 12px; color: var(--text-muted); }
 .an-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
-.an-donut-wrap { display: flex; justify-content: center; }
 
 /* pipeline */
-.an-pipeline {
-  display: flex; align-items: center; gap: 8px;
-}
+.an-pipeline { display: flex; align-items: center; gap: 8px; }
 .an-pipe-step { flex: 1; }
 .an-pipe-val { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
 .an-pipe-bar-wrap { background: #1a1a1a; border-radius: 4px; height: 6px; margin-bottom: 6px; overflow: hidden; }
@@ -449,16 +530,15 @@ new Chart(document.getElementById('jobsChart'), {
 .an-feed-item {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 8px; border-radius: 7px;
-  text-decoration: none; color: var(--text);
-  transition: background 0.15s;
+  text-decoration: none; color: var(--text); transition: background 0.15s;
 }
 .an-feed-item:hover { background: #1a1a1a; text-decoration: none; }
 .an-feed-badge {
   font-size: 10px; font-weight: 700; letter-spacing: 1px;
   padding: 3px 7px; border-radius: 4px; flex-shrink: 0;
 }
-.an-badge-invoice { background: rgba(144,70,214,0.2); color: #9046d6; }
-.an-badge-quote   { background: rgba(52,152,219,0.2); color: #3498db; }
+.an-badge-quote   { background: rgba(144,70,214,0.2); color: #9046d6; }
+.an-badge-invoice { background: rgba(231,76,60,0.2);  color: #e74c3c; }
 .an-badge-receipt { background: rgba(39,174,96,0.2);  color: #27ae60; }
 .an-feed-body { flex: 1; min-width: 0; }
 .an-feed-num { font-size: 13px; font-weight: 600; color: var(--text); }
