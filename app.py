@@ -2785,7 +2785,7 @@ def analytics():
 
     # All non-voided, non-discarded documents for this user
     docs = _rows_to_list(db.execute(
-        "SELECT doc_type, status, subtotal, discount, tax_amount, amount_due,"
+        "SELECT doc_type, status, subtotal, discount, tax_amount, paid_amount, amount_due,"
         " currency, created_at, pay_by_date, client_uuid, job_id, voided, discarded"
         " FROM documents"
         " WHERE user_id=? AND voided=0 AND discarded=0"
@@ -2793,20 +2793,21 @@ def analytics():
         (uid,),
     ).fetchall())
 
-    # All receipts (which carry amount_due = amount actually paid)
+    # All receipts use paid_amount (amount_due on a receipt = remaining balance, often 0)
     receipts = [d for d in docs if d['doc_type'] == 'receipt']
     invoices = [d for d in docs if d['doc_type'] == 'invoice']
     quotes   = [d for d in docs if d['doc_type'] == 'quote']
 
     # --- Top-level stats ---
-    def _usd(doc):
-        """Normalize to USD loosely for mixing currencies in totals."""
-        # For now just sum raw — user sees per-currency breakdown separately
-        return (doc.get('amount_due') or 0)
+    def _receipt_amt(doc):
+        return (doc.get('paid_amount') or 0)
 
-    total_collected = sum(_usd(d) for d in receipts)
-    total_invoiced  = sum(_usd(d) for d in invoices)
-    total_quoted    = sum(_usd(d) for d in quotes)
+    def _invoice_amt(doc):
+        return (doc.get('paid_amount') or 0) if doc.get('status') == 'paid' else (doc.get('amount_due') or 0)
+
+    total_collected = sum(_receipt_amt(d) for d in receipts)
+    total_invoiced  = sum(_invoice_amt(d) for d in invoices)
+    total_quoted    = sum((d.get('subtotal', 0) - d.get('discount', 0)) for d in quotes)
 
     # Outstanding from gigs
     gigs = _sb_gigs_for_user(uid, include_discarded=False)
@@ -2830,14 +2831,14 @@ def analytics():
         try:
             dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
             key = (dt.year, dt.month)
-            monthly_collected[key] += (d.get('amount_due') or 0)
+            monthly_collected[key] += (d.get('paid_amount') or 0)
         except Exception:
             pass
     for d in invoices:
         try:
             dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
             key = (dt.year, dt.month)
-            monthly_invoiced[key] += (d.get('amount_due') or 0)
+            monthly_invoiced[key] += _invoice_amt(d)
         except Exception:
             pass
 
@@ -2852,13 +2853,13 @@ def analytics():
     for d in receipts:
         cuuid = d.get('client_uuid')
         name = labels_map.get(cuuid, 'Unknown') if cuuid else 'Unknown'
-        client_revenue[name] += (d.get('amount_due') or 0)
+        client_revenue[name] += (d.get('paid_amount') or 0)
     top_clients = sorted(client_revenue.items(), key=lambda x: x[1], reverse=True)[:8]
 
     # --- Currency split ---
     currency_totals = defaultdict(float)
     for d in receipts:
-        currency_totals[d.get('currency','USD')] += (d.get('amount_due') or 0)
+        currency_totals[d.get('currency','USD')] += (d.get('paid_amount') or 0)
 
     # --- Doc pipeline (all time) ---
     pipeline = {
@@ -2926,7 +2927,7 @@ def analytics():
 
     # --- Recent activity feed ---
     all_docs_recent = _rows_to_list(db.execute(
-        "SELECT id, doc_number, doc_type, status, created_at, amount_due, currency, client_uuid"
+        "SELECT id, doc_number, doc_type, status, created_at, paid_amount, amount_due, currency, client_uuid"
         " FROM documents WHERE user_id=? AND discarded=0"
         " ORDER BY created_at DESC LIMIT 15",
         (uid,),
