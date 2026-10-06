@@ -158,6 +158,8 @@ def init_db():
     _add_col('jobs', 'job_client_uuids', 'TEXT')
     _add_col('documents', 'client_uuid',        'TEXT')
     _add_col('client_templates', 'client_uuid', 'TEXT')
+    _add_col('documents', 'project_discount', 'REAL DEFAULT 0')
+    _add_col('documents', 'project_total',    'REAL DEFAULT 0')
 
     c.execute("UPDATE documents SET status='pending' WHERE status IN ('draft', 'issued')")
 

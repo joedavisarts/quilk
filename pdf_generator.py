@@ -120,22 +120,47 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     user_ctx['payment_methods'] = payment_methods
     user_ctx['social_links'] = json.loads(user.get('social_links_json') or '[]')
 
+    # Ensure project_discount and project_total are always present in the doc dict
+    # for templates, defaulting to 0 / subtotal for legacy docs.
+    doc_ctx = dict(doc)
+    if not doc_ctx.get('project_discount'):
+        doc_ctx['project_discount'] = 0
+    if not doc_ctx.get('project_total'):
+        doc_ctx['project_total'] = (doc_ctx.get('subtotal') or 0) - (doc_ctx.get('project_discount') or 0)
+
     if user.get('username') == 'aureum':
         env.filters['bank_rows'] = _bank_rows
         template = env.get_template('aureum_doc.html')
-        doc_titles = {'invoice': 'INVOICE', 'quote': 'QUOTE', 'receipt': 'RECEIPT'}
+        # Build doc_title including deposit/balance variants
+        invoice_type = doc_ctx.get('invoice_type')
+        if doc_type == 'invoice':
+            if invoice_type == 'deposit':
+                doc_title = 'DEPOSIT INVOICE'
+            elif invoice_type == 'balance':
+                doc_title = 'BALANCE INVOICE'
+            else:
+                doc_title = 'INVOICE'
+        elif doc_type == 'receipt':
+            if invoice_type == 'deposit':
+                doc_title = 'DEPOSIT RECEIPT'
+            elif invoice_type == 'balance':
+                doc_title = 'BALANCE RECEIPT'
+            else:
+                doc_title = 'RECEIPT'
+        else:
+            doc_title = doc_type.upper()
         html_str = template.render(
-            doc=doc,
+            doc=doc_ctx,
             client=client,
             user=user_ctx,
-            doc_title=doc_titles.get(doc_type, doc_type.upper()),
+            doc_title=doc_title,
             aureum_logo_b64=_logo_b64_for_file('aureum_luxe_logo.png'),
             vsm_logo_b64=_logo_b64_for_file('VSMLogoWhite.png'),
         )
     else:
         template = env.get_template(f'{doc_type}.html')
         html_str = template.render(
-            doc=doc,
+            doc=doc_ctx,
             client=client,
             logo_b64=_logo_b64_for_file(user.get('logo_filename')),
             logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
