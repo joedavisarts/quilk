@@ -57,7 +57,7 @@
           <th>Client</th>
           <th>Date</th>
           <th style="white-space:nowrap;">Currency</th>
-          <th style="white-space:nowrap;text-align:right;">Amount Due</th>
+          <th style="white-space:nowrap;text-align:right;">Total</th>
           <th>Status</th>
           <th></th>
         </tr>
@@ -80,7 +80,7 @@
           <td>{{ doc.client_name or '—' }}</td>
           <td style="color:var(--text-muted);font-size:13px;">{{ doc.date_issued }}</td>
           <td>{{ doc.currency }}</td>
-          <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ doc.amount_due | format_currency }}</td>
+          <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ (doc.subtotal - doc.discount) | format_currency }}</td>
           <td style="white-space:nowrap;">
             <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
             {% if doc.is_overdue %}<span class="status status-overdue" style="margin-left:4px;">overdue</span>{% endif %}
@@ -117,7 +117,7 @@
         <div class="card-meta">
           {% if doc.client_name %}<span>{{ doc.client_name }}</span>{% endif %}
           <span>{{ doc.date_issued }}</span>
-          <span style="font-variant-numeric:tabular-nums;">{{ doc.currency }} {{ doc.amount_due | format_currency }}</span>
+          <span style="font-variant-numeric:tabular-nums;">{{ doc.currency }} {{ (doc.subtotal - doc.discount) | format_currency }}</span>
         </div>
         <div class="card-footer">
           <div>
