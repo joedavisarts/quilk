@@ -568,7 +568,7 @@ renderAll();
   align-items:start;
 }
 .an-charts-col { display:flex; flex-direction:column; gap:16px; }
-.an-sidebar { position:sticky; top:80px; }
+.an-sidebar { position:sticky; top:80px; min-width:0; overflow:hidden; }
 
 /* ── 2-col sub-row inside charts col (top clients + currency) ── */
 .an-two-col {
@@ -639,6 +639,8 @@ renderAll();
   }
   .an-sidebar {
     position: static;
+    min-width: 0;
+    overflow: hidden;
   }
   /* Full-width 2-col sub-row → single col */
   .an-two-col {
