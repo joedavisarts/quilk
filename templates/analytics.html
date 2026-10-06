@@ -7,15 +7,26 @@
     <h1>Analytics</h1>
     <span class="page-sub">your numbers, all in one place</span>
   </div>
-  <div class="an-currency-wrap">
-    <label class="an-currency-label">View in</label>
-    <select id="currencySelect" class="an-currency-select" onchange="setCurrency(this.value)">
-      <option value="JMD">JMD</option>
-      <option value="USD">USD</option>
-      <option value="GBP">GBP</option>
-      <option value="EUR">EUR</option>
-      <option value="CAD">CAD</option>
-    </select>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div class="an-currency-wrap">
+      <label class="an-currency-label">Period</label>
+      <select id="periodSelect" class="an-currency-select" onchange="setPeriod(this.value)">
+        <option value="default">All time</option>
+        <option value="year">This year</option>
+        <option value="6m">Last 6 months</option>
+        <option value="3m">Last 3 months</option>
+      </select>
+    </div>
+    <div class="an-currency-wrap">
+      <label class="an-currency-label">View in</label>
+      <select id="currencySelect" class="an-currency-select" onchange="setCurrency(this.value)">
+        <option value="JMD">JMD</option>
+        <option value="USD">USD</option>
+        <option value="GBP">GBP</option>
+        <option value="EUR">EUR</option>
+        <option value="CAD">CAD</option>
+      </select>
+    </div>
   </div>
 </div>
 
@@ -229,6 +240,7 @@ const FX = {
 const SYMBOLS = { USD:'$', JMD:'J$', GBP:'£', EUR:'€', CAD:'CA$' };
 
 let currentCurrency = 'JMD';
+let currentPeriod   = 'default';
 
 // Convert an amount in nativeCur to the display currency
 function toDisplay(amount, nativeCur) {
@@ -265,14 +277,23 @@ const rawTopClients = {{ top_clients|safe }};
 const jobData       = {{ chart_jobs|safe }};
 const overdueC      = {{ overdue_counts|safe }};
 const overdueA      = {{ overdue_amounts|safe }};
+const rawInvCount   = {{ chart_inv_count|safe }};
+const NOW_YEAR      = {{ now_year }};
 
 // ── TILES ──
-function updateTiles() {
-  document.getElementById('tile-collected').textContent   = fmt(sumByCurrency(collectedByCur));
-  document.getElementById('tile-invoiced').textContent    = fmt(sumByCurrency(invoicedByCur));
-  // Outstanding and avg invoice: JMD-dominant, treat as JMD
-  document.getElementById('tile-outstanding').textContent = fmt(toDisplay(RAW_OUTSTANDING, 'JMD'));
-  document.getElementById('tile-avg-invoice').textContent = fmt(toDisplay(RAW_AVG_INVOICE, 'JMD'));
+function renderTiles(totalColl, totalInv, totalCnt, isDefault) {
+  if (isDefault) {
+    document.getElementById('tile-collected').textContent   = fmt(sumByCurrency(collectedByCur));
+    document.getElementById('tile-invoiced').textContent    = fmt(sumByCurrency(invoicedByCur));
+    document.getElementById('tile-outstanding').textContent = fmt(toDisplay(RAW_OUTSTANDING, 'JMD'));
+    document.getElementById('tile-avg-invoice').textContent = fmt(toDisplay(RAW_AVG_INVOICE, 'JMD'));
+  } else {
+    document.getElementById('tile-collected').textContent   = fmt(toDisplay(totalColl, 'JMD'));
+    document.getElementById('tile-invoiced').textContent    = fmt(toDisplay(totalInv, 'JMD'));
+    document.getElementById('tile-outstanding').textContent = fmt(toDisplay(RAW_OUTSTANDING, 'JMD'));
+    document.getElementById('tile-avg-invoice').textContent =
+      totalCnt > 0 ? fmt(toDisplay(totalInv / totalCnt, 'JMD')) : '—';
+  }
 }
 
 // ── CHARTS ──
@@ -422,27 +443,75 @@ const jobsChart = new Chart(document.getElementById('jobsChart'), {
   }
 });
 
-// ── CURRENCY SWITCH ──
-function setCurrency(cur) {
-  currentCurrency = cur;
-  updateTiles();
+// ── PERIOD + CURRENCY ──
+function getPeriodSlice() {
+  const n = monthLabels.length;
+  if (currentPeriod === 'default') return null;
+  if (currentPeriod === 'year') {
+    const s = monthLabels.findIndex(l => l.startsWith(NOW_YEAR + '-'));
+    return s < 0 ? null : [s, n - 1];
+  }
+  if (currentPeriod === '6m') return [Math.max(0, n - 6), n - 1];
+  if (currentPeriod === '3m') return [Math.max(0, n - 3), n - 1];
+  return null;
+}
 
-  revenueChart.data.datasets[0].data = rawCollected.map(v => Math.round(toDisplay(v, 'JMD')));
-  revenueChart.data.datasets[1].data = rawInvoiced.map(v => Math.round(toDisplay(v, 'JMD')));
+function renderAll() {
+  const slice = getPeriodSlice();
+  const isDefault = slice === null;
+  const cur = currentCurrency;
+
+  // Tile data
+  let totalColl = 0, totalInv = 0, totalCnt = 0;
+  if (!isDefault) {
+    const [s, e] = slice;
+    totalColl = rawCollected.slice(s, e + 1).reduce((a, v) => a + v, 0);
+    totalInv  = rawInvoiced.slice(s, e + 1).reduce((a, v) => a + v, 0);
+    totalCnt  = rawInvCount.slice(s, e + 1).reduce((a, v) => a + v, 0);
+  }
+  renderTiles(totalColl, totalInv, totalCnt, isDefault);
+
+  // Revenue chart
+  const revLabels = isDefault ? monthLabels : monthLabels.slice(slice[0], slice[1] + 1);
+  const revColl   = isDefault ? rawCollected : rawCollected.slice(slice[0], slice[1] + 1);
+  const revInv    = isDefault ? rawInvoiced  : rawInvoiced.slice(slice[0], slice[1] + 1);
+  revenueChart.data.labels = revLabels;
+  revenueChart.data.datasets[0].data = revColl.map(v => Math.round(toDisplay(v, 'JMD')));
+  revenueChart.data.datasets[1].data = revInv.map(v => Math.round(toDisplay(v, 'JMD')));
   revenueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
   revenueChart.update();
 
+  // Jobs chart
+  const jobLabels = isDefault ? monthLabels : monthLabels.slice(slice[0], slice[1] + 1);
+  const jobSlice  = isDefault ? jobData     : jobData.slice(slice[0], slice[1] + 1);
+  jobsChart.data.labels = jobLabels;
+  jobsChart.data.datasets[0].data = jobSlice;
+  jobsChart.update();
+
+  // Top clients (all-time; no per-month client data)
+  clientChart.data.labels = rawTopClients.map(c => c[0].length > 20 ? c[0].slice(0,18)+'…' : c[0]);
   clientChart.data.datasets[0].data = rawTopClients.map(c => Math.round(toDisplay(c[1], 'JMD')));
-  clientChart.options.scales.x.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
+  clientChart.options.scales.x.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
   clientChart.options.plugins.tooltip.callbacks.label = ctx => ' ' + SYMBOLS[cur] + ctx.raw.toLocaleString();
   clientChart.update();
 
+  // Overdue (all-time; point-in-time)
   overdueChart.data.datasets[0].data = rawOverdueAmts.map(v => Math.round(toDisplay(v, 'JMD')));
-  overdueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
+  overdueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
   overdueChart.update();
 }
 
-updateTiles();
+function setCurrency(cur) {
+  currentCurrency = cur;
+  renderAll();
+}
+
+function setPeriod(p) {
+  currentPeriod = p;
+  renderAll();
+}
+
+renderAll();
 </script>
 
 <style>

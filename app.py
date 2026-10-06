@@ -2860,23 +2860,35 @@ def analytics():
     collection_rate = (total_collected / total_invoiced * 100) if total_invoiced else 0
     active_jobs = sum(1 for g in gigs if not g.get('discarded'))
 
-    # --- Revenue by month (last 13 months) ---
+    # --- Revenue by month (smart range: 1 before first invoice, max 12 months) ---
     now = datetime.datetime.utcnow()
+    _cur_total = now.year * 12 + (now.month - 1)
+    _cap_start = _cur_total - 12
+    _earliest  = None
+    for _d in invoices:
+        try:
+            _dt = datetime.datetime.fromisoformat(_d['created_at'].replace('Z', ''))
+            if _earliest is None or _dt < _earliest:
+                _earliest = _dt
+        except Exception:
+            pass
+    if _earliest:
+        _start_total = max(_earliest.year * 12 + (_earliest.month - 1) - 1, _cap_start)
+    else:
+        _start_total = _cap_start
     months = []
-    for i in range(12, -1, -1):
-        # Step back i months from current month using safe arithmetic
-        total_months = now.year * 12 + (now.month - 1) - i
-        y = total_months // 12
-        m = total_months % 12 + 1
-        months.append((y, m))
+    for _t in range(_start_total, _cur_total + 1):
+        months.append((_t // 12, _t % 12 + 1))
 
     monthly_collected = defaultdict(float)
     monthly_invoiced  = defaultdict(float)
+    monthly_inv_count = defaultdict(int)
     for d in invoices:
         try:
             dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
             key = (dt.year, dt.month)
             monthly_collected[key] += _invoice_collected(d)
+            monthly_inv_count[key] += 1
         except Exception:
             pass
     for d in invoices:
@@ -2887,9 +2899,10 @@ def analytics():
         except Exception:
             pass
 
-    month_labels = [f"{y}-{m:02d}" for y, m in months]
+    month_labels    = [f"{y}-{m:02d}" for y, m in months]
     chart_collected = [round(monthly_collected.get((y,m), 0), 2) for y,m in months]
     chart_invoiced  = [round(monthly_invoiced.get((y,m), 0), 2)  for y,m in months]
+    chart_inv_count = [monthly_inv_count.get((y,m), 0) for y,m in months]
 
     # --- Revenue by client ---
     client_map = _sb_client_map(uid, include_discarded=True)
@@ -3023,6 +3036,8 @@ def analytics():
         month_labels=_json.dumps(month_labels),
         chart_collected=_json.dumps(chart_collected),
         chart_invoiced=_json.dumps(chart_invoiced),
+        chart_inv_count=_json.dumps(chart_inv_count),
+        now_year=now.year,
         top_clients=_json.dumps(top_clients),
         currency_totals=_json.dumps(dict(currency_totals)),
         collected_by_currency=_json.dumps(dict(collected_by_currency)),
