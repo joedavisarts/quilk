@@ -258,6 +258,13 @@ function fmt(val) {
   return sym + Math.round(val).toLocaleString();
 }
 
+function fmtAxis(cur, val) {
+  const sym = SYMBOLS[cur] || cur + ' ';
+  if (Math.abs(val) >= 1_000_000) return sym + (val / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (Math.abs(val) >= 1_000)     return sym + (val / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return sym + val;
+}
+
 // ── SERVER DATA ──
 // Per-currency breakdowns for accurate tile totals
 const collectedByCur  = {{ collected_by_currency|safe }};
@@ -342,7 +349,7 @@ const revenueChart = new Chart(document.getElementById('revenueChart'), {
           }
         }
       },
-      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency] + v.toLocaleString() } }
+      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => fmtAxis(currentCurrency, v) } }
     }
   }
 });
@@ -478,7 +485,7 @@ function renderAll() {
   revenueChart.data.labels = revLabels;
   revenueChart.data.datasets[0].data = revColl.map(v => Math.round(toDisplay(v, 'JMD')));
   revenueChart.data.datasets[1].data = revInv.map(v => Math.round(toDisplay(v, 'JMD')));
-  revenueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
+  revenueChart.options.scales.y.ticks.callback = v => fmtAxis(cur, v);
   revenueChart.update();
 
   // Jobs chart
@@ -588,11 +595,13 @@ renderAll();
 .an-pipe-label { font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); }
 .an-pipe-arrow { font-size:20px; color:var(--text-dim); margin:0 4px; padding-bottom:14px; }
 
-.an-feed { display:flex; flex-direction:column; gap:2px; }
+.an-feed { display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+.an-sidebar .an-card { overflow:hidden; }
 .an-feed-item {
   display:flex; align-items:center; gap:10px;
   padding:10px 8px; border-radius:7px;
   text-decoration:none; color:var(--text); transition:background 0.15s;
+  min-width:0; max-width:100%; overflow:hidden;
 }
 .an-feed-item:hover { background:#1a1a1a; text-decoration:none; }
 .an-feed-badge { font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 7px; border-radius:4px; flex-shrink:0; }
