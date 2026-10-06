@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+{% block title %}Analytics — Quilk{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Analytics</h1>
+    <span class="page-sub">your numbers, all in one place</span>
+  </div>
+</div>
+
+<!-- ── STAT TILES ── -->
+<div class="an-stat-grid">
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(144,70,214,0.15);">
+      <svg viewBox="0 0 24 24" fill="#9046d6"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">total collected</div>
+      <div class="an-stat-value">${{ "%.0f"|format(total_collected) }}</div>
+      <div class="an-stat-sub">{{ doc_counts.receipt }} receipt{{ 's' if doc_counts.receipt != 1 }}</div>
+    </div>
+  </div>
+
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(39,174,96,0.12);">
+      <svg viewBox="0 0 24 24" fill="#27ae60"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">total invoiced</div>
+      <div class="an-stat-value">${{ "%.0f"|format(total_invoiced) }}</div>
+      <div class="an-stat-sub">{{ doc_counts.invoice }} invoice{{ 's' if doc_counts.invoice != 1 }}</div>
+    </div>
+  </div>
+
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(230,126,34,0.12);">
+      <svg viewBox="0 0 24 24" fill="#e67e22"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H7l5-8v4h4l-5 8z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">outstanding</div>
+      <div class="an-stat-value {% if total_outstanding > 0 %}an-warn{% endif %}">${{ "%.0f"|format(total_outstanding) }}</div>
+      <div class="an-stat-sub">across {{ active_jobs }} active job{{ 's' if active_jobs != 1 }}</div>
+    </div>
+  </div>
+
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(52,152,219,0.12);">
+      <svg viewBox="0 0 24 24" fill="#3498db"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">collection rate</div>
+      <div class="an-stat-value">{{ "%.0f"|format(collection_rate) }}%</div>
+      <div class="an-stat-sub">paid / invoiced</div>
+    </div>
+  </div>
+
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(144,70,214,0.10);">
+      <svg viewBox="0 0 24 24" fill="#9046d6"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">avg days to pay</div>
+      <div class="an-stat-value">{% if avg_days_to_pay is not none %}{{ avg_days_to_pay }}d{% else %}—{% endif %}</div>
+      <div class="an-stat-sub">invoice → receipt</div>
+    </div>
+  </div>
+
+  <div class="an-stat">
+    <div class="an-stat-icon" style="background:rgba(39,174,96,0.10);">
+      <svg viewBox="0 0 24 24" fill="#27ae60"><path d="M20 7H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm0 12H4V9h16v10zM15 3H9c-1.1 0-2 .9-2 2v2h2V5h6v2h2V5c0-1.1-.9-2-2-2z"/></svg>
+    </div>
+    <div class="an-stat-body">
+      <div class="an-stat-label">avg invoice value</div>
+      <div class="an-stat-value">${{ "%.0f"|format(avg_invoice) }}</div>
+      <div class="an-stat-sub">per invoice</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHARTS + FEED GRID ── -->
+<div class="an-main-grid">
+
+  <!-- LEFT: charts column -->
+  <div class="an-charts-col">
+
+    <!-- Revenue over time -->
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">revenue over time</span>
+        <div class="an-legend">
+          <span class="an-dot" style="background:#9046d6"></span><span>collected</span>
+          <span class="an-dot" style="background:#27ae60;margin-left:12px"></span><span>invoiced</span>
+        </div>
+      </div>
+      <canvas id="revenueChart" height="100"></canvas>
+    </div>
+
+    <!-- Two-col row -->
+    <div class="an-two-col">
+
+      <!-- Top clients -->
+      <div class="an-card">
+        <div class="an-card-header">
+          <span class="an-card-title">top clients</span>
+          <span class="an-card-sub">by collected</span>
+        </div>
+        <canvas id="clientChart" height="180"></canvas>
+      </div>
+
+      <!-- Currency split -->
+      <div class="an-card">
+        <div class="an-card-header">
+          <span class="an-card-title">currency split</span>
+          <span class="an-card-sub">collected</span>
+        </div>
+        <div class="an-donut-wrap">
+          <canvas id="currencyChart" height="160"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Doc pipeline -->
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">document pipeline</span>
+        <span class="an-card-sub">all time</span>
+      </div>
+      <div class="an-pipeline">
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#3498db">{{ pipeline.quotes }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#3498db;width:{% if pipeline.quotes %}{{ [100, pipeline.quotes / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">quotes</div>
+        </div>
+        <div class="an-pipe-arrow">→</div>
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#9046d6">{{ pipeline.invoices }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#9046d6;width:{% if pipeline.invoices %}{{ [100, pipeline.invoices / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">invoices</div>
+        </div>
+        <div class="an-pipe-arrow">→</div>
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#27ae60">{{ pipeline.receipts }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#27ae60;width:{% if pipeline.receipts %}{{ [100, pipeline.receipts / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">receipts</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overdue -->
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">overdue invoices</span>
+        <span class="an-card-sub">by age</span>
+      </div>
+      <canvas id="overdueChart" height="80"></canvas>
+    </div>
+
+    <!-- Monthly jobs -->
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">new jobs per month</span>
+      </div>
+      <canvas id="jobsChart" height="80"></canvas>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: activity feed -->
+  <div class="an-feed-col">
+    <div class="an-card an-feed-card">
+      <div class="an-card-header">
+        <span class="an-card-title">recent activity</span>
+      </div>
+      <div class="an-feed">
+        {% for doc in recent_activity %}
+        <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="an-feed-item">
+          <span class="an-feed-badge an-badge-{{ doc.doc_type }}">{{ doc.doc_type[:3].upper() }}</span>
+          <div class="an-feed-body">
+            <div class="an-feed-num">{{ doc.doc_number }}</div>
+            <div class="an-feed-client">{{ doc.client_name }}</div>
+          </div>
+          <div class="an-feed-right">
+            <div class="an-feed-amount">${{ "%.0f"|format(doc.amount_due or 0) }}</div>
+            <div class="an-feed-status an-status-{{ doc.status }}">{{ doc.status }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+const PURPLE = '#9046d6';
+const GREEN  = '#27ae60';
+const BLUE   = '#3498db';
+const ORANGE = '#e67e22';
+const RED    = '#e74c3c';
+const TEAL   = '#1abc9c';
+
+Chart.defaults.color = '#888';
+Chart.defaults.borderColor = '#2a2a2a';
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size = 13;
+
+const monthLabels  = {{ month_labels|safe }};
+const collected    = {{ chart_collected|safe }};
+const invoiced     = {{ chart_invoiced|safe }};
+const topClients   = {{ top_clients|safe }};
+const currencyData = {{ currency_totals|safe }};
+const jobData      = {{ chart_jobs|safe }};
+const overdueC     = {{ overdue_counts|safe }};
+const overdueA     = {{ overdue_amounts|safe }};
+
+// -- Revenue over time --
+new Chart(document.getElementById('revenueChart'), {
+  type: 'line',
+  data: {
+    labels: monthLabels,
+    datasets: [
+      {
+        label: 'Collected',
+        data: collected,
+        borderColor: PURPLE,
+        backgroundColor: 'rgba(144,70,214,0.08)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      },
+      {
+        label: 'Invoiced',
+        data: invoiced,
+        borderColor: GREEN,
+        backgroundColor: 'rgba(39,174,96,0.06)',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        borderDash: [4,3],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#1e1e1e' }, ticks: { maxTicksLimit: 6 } },
+      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$' + v.toLocaleString() } }
+    }
+  }
+});
+
+// -- Top clients --
+new Chart(document.getElementById('clientChart'), {
+  type: 'bar',
+  data: {
+    labels: topClients.map(c => c[0].length > 16 ? c[0].slice(0,14)+'…' : c[0]),
+    datasets: [{
+      data: topClients.map(c => c[1]),
+      backgroundColor: [PURPLE,'#7D2ED1','#a860e8','#c090f0',BLUE,TEAL,GREEN,ORANGE],
+      borderRadius: 4,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}) }}
+    },
+    scales: {
+      x: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$'+v.toLocaleString() } },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+// -- Currency donut --
+const currKeys = Object.keys(currencyData);
+const currVals = currKeys.map(k => currencyData[k]);
+new Chart(document.getElementById('currencyChart'), {
+  type: 'doughnut',
+  data: {
+    labels: currKeys,
+    datasets: [{
+      data: currVals,
+      backgroundColor: [PURPLE, GREEN, BLUE, ORANGE, TEAL, RED],
+      borderColor: '#0E0E0E',
+      borderWidth: 3,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    cutout: '65%',
+    plugins: {
+      legend: { position: 'bottom', labels: { padding: 12, boxWidth: 12 } },
+      tooltip: { callbacks: { label: ctx => ctx.label + ': $' + ctx.raw.toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0}) }}
+    }
+  }
+});
+
+// -- Overdue bar --
+const overdueLabels = ['0–30 days','31–60 days','61–90 days','90+ days'];
+const overdueAmts   = [overdueA['0-30']||0, overdueA['31-60']||0, overdueA['61-90']||0, overdueA['90+']||0];
+const overdueCnts   = [overdueC['0-30']||0, overdueC['31-60']||0, overdueC['61-90']||0, overdueC['90+']||0];
+new Chart(document.getElementById('overdueChart'), {
+  type: 'bar',
+  data: {
+    labels: overdueLabels,
+    datasets: [{
+      label: 'Amount',
+      data: overdueAmts,
+      backgroundColor: [GREEN, ORANGE, '#e74c3c', '#8e1010'],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: {
+        label: (ctx) => {
+          const idx = ctx.dataIndex;
+          return ` $${ctx.raw.toLocaleString()} (${overdueCnts[idx]} inv)`;
+        }
+      }}
+    },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => '$'+v.toLocaleString() } }
+    }
+  }
+});
+
+// -- Jobs per month --
+new Chart(document.getElementById('jobsChart'), {
+  type: 'bar',
+  data: {
+    labels: monthLabels,
+    datasets: [{
+      data: jobData,
+      backgroundColor: 'rgba(144,70,214,0.5)',
+      hoverBackgroundColor: PURPLE,
+      borderRadius: 3,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+      y: { grid: { color: '#1e1e1e' }, ticks: { stepSize: 1 } }
+    }
+  }
+});
+</script>
+
+<style>
+/* ── ANALYTICS PAGE ── */
+.an-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.an-stat {
+  background: linear-gradient(135deg,#1a1a1a 0%,#111 100%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+  transition: border-color 0.2s;
+}
+.an-stat:hover { border-color: #9046d6; }
+.an-stat-icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.an-stat-icon svg { width: 22px; height: 22px; }
+.an-stat-body { min-width: 0; }
+.an-stat-label {
+  font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--text-dim); font-weight: 600; margin-bottom: 4px;
+}
+.an-stat-value {
+  font-size: 26px; font-weight: 700; color: var(--text);
+  line-height: 1.1; margin-bottom: 3px;
+}
+.an-stat-value.an-warn { color: #e67e22; }
+.an-stat-sub { font-size: 12px; color: var(--text-muted); }
+
+.an-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 16px;
+  align-items: start;
+}
+.an-charts-col { display: flex; flex-direction: column; gap: 16px; }
+.an-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.an-card {
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+}
+.an-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.an-card-title {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted);
+}
+.an-card-sub { font-size: 12px; color: var(--text-dim); }
+.an-legend { display: flex; align-items: center; font-size: 12px; color: var(--text-muted); }
+.an-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.an-donut-wrap { display: flex; justify-content: center; }
+
+/* pipeline */
+.an-pipeline {
+  display: flex; align-items: center; gap: 8px;
+}
+.an-pipe-step { flex: 1; }
+.an-pipe-val { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+.an-pipe-bar-wrap { background: #1a1a1a; border-radius: 4px; height: 6px; margin-bottom: 6px; overflow: hidden; }
+.an-pipe-bar { height: 6px; border-radius: 4px; transition: width 0.6s ease; }
+.an-pipe-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); }
+.an-pipe-arrow { font-size: 20px; color: var(--text-dim); margin: 0 4px; padding-bottom: 14px; }
+
+/* feed */
+.an-feed-card { height: 100%; }
+.an-feed { display: flex; flex-direction: column; gap: 2px; }
+.an-feed-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 8px; border-radius: 7px;
+  text-decoration: none; color: var(--text);
+  transition: background 0.15s;
+}
+.an-feed-item:hover { background: #1a1a1a; text-decoration: none; }
+.an-feed-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  padding: 3px 7px; border-radius: 4px; flex-shrink: 0;
+}
+.an-badge-invoice { background: rgba(144,70,214,0.2); color: #9046d6; }
+.an-badge-quote   { background: rgba(52,152,219,0.2); color: #3498db; }
+.an-badge-receipt { background: rgba(39,174,96,0.2);  color: #27ae60; }
+.an-feed-body { flex: 1; min-width: 0; }
+.an-feed-num { font-size: 13px; font-weight: 600; color: var(--text); }
+.an-feed-client { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-feed-right { text-align: right; flex-shrink: 0; }
+.an-feed-amount { font-size: 13px; font-weight: 600; color: var(--text); }
+.an-feed-status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+.an-status-paid    { color: #27ae60; }
+.an-status-sent    { color: #3498db; }
+.an-status-pending { color: #e67e22; }
+.an-status-overdue { color: #e74c3c; }
+.an-status-draft   { color: var(--text-dim); }
+.an-status-voided  { color: var(--text-dim); }
+</style>
+{% endblock %}

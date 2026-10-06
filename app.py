@@ -2763,3 +2763,196 @@ init_db()
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5050))
     app.run(host='0.0.0.0', port=port, debug=False)
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+@app.route('/analytics')
+@login_required
+def analytics():
+    from collections import defaultdict
+    import datetime
+
+    db = get_db()
+    uid = current_user.id
+
+    # All non-voided, non-discarded documents for this user
+    docs = _rows_to_list(db.execute(
+        "SELECT doc_type, status, subtotal, discount, tax_amount, amount_due,"
+        " currency, created_at, pay_by_date, client_uuid, job_id, voided, discarded"
+        " FROM documents"
+        " WHERE user_id=? AND voided=0 AND discarded=0"
+        " ORDER BY created_at ASC",
+        (uid,),
+    ).fetchall())
+
+    # All receipts (which carry amount_due = amount actually paid)
+    receipts = [d for d in docs if d['doc_type'] == 'receipt']
+    invoices = [d for d in docs if d['doc_type'] == 'invoice']
+    quotes   = [d for d in docs if d['doc_type'] == 'quote']
+
+    # --- Top-level stats ---
+    def _usd(doc):
+        """Normalize to USD loosely for mixing currencies in totals."""
+        # For now just sum raw — user sees per-currency breakdown separately
+        return (doc.get('amount_due') or 0)
+
+    total_collected = sum(_usd(d) for d in receipts)
+    total_invoiced  = sum(_usd(d) for d in invoices)
+    total_quoted    = sum(_usd(d) for d in quotes)
+
+    # Outstanding from gigs
+    gigs = _sb_gigs_for_user(uid, include_discarded=False)
+    total_outstanding = sum((g.get('amount_outstanding') or 0) for g in gigs if not g.get('discarded'))
+
+    avg_invoice = (total_invoiced / len(invoices)) if invoices else 0
+    collection_rate = (total_collected / total_invoiced * 100) if total_invoiced else 0
+    active_jobs = sum(1 for g in gigs if not g.get('discarded'))
+
+    # --- Revenue by month (last 13 months) ---
+    now = datetime.datetime.utcnow()
+    months = []
+    for i in range(12, -1, -1):
+        m = (now.month - i - 1) % 12 + 1
+        y = now.year - ((now.month - i - 1) // 12)
+        months.append((y, m))
+
+    monthly_collected = defaultdict(float)
+    monthly_invoiced  = defaultdict(float)
+    for d in receipts:
+        try:
+            dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
+            key = (dt.year, dt.month)
+            monthly_collected[key] += (d.get('amount_due') or 0)
+        except Exception:
+            pass
+    for d in invoices:
+        try:
+            dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
+            key = (dt.year, dt.month)
+            monthly_invoiced[key] += (d.get('amount_due') or 0)
+        except Exception:
+            pass
+
+    month_labels = [f"{y}-{m:02d}" for y, m in months]
+    chart_collected = [round(monthly_collected.get((y,m), 0), 2) for y,m in months]
+    chart_invoiced  = [round(monthly_invoiced.get((y,m), 0), 2)  for y,m in months]
+
+    # --- Revenue by client ---
+    client_map = _sb_client_map(uid, include_discarded=True)
+    labels_map = _client_display_labels_from_list(list(client_map.values()))
+    client_revenue = defaultdict(float)
+    for d in receipts:
+        cuuid = d.get('client_uuid')
+        name = labels_map.get(cuuid, 'Unknown') if cuuid else 'Unknown'
+        client_revenue[name] += (d.get('amount_due') or 0)
+    top_clients = sorted(client_revenue.items(), key=lambda x: x[1], reverse=True)[:8]
+
+    # --- Currency split ---
+    currency_totals = defaultdict(float)
+    for d in receipts:
+        currency_totals[d.get('currency','USD')] += (d.get('amount_due') or 0)
+
+    # --- Doc pipeline (all time) ---
+    pipeline = {
+        'quotes':   len(quotes),
+        'invoices': len(invoices),
+        'receipts': len(receipts),
+    }
+
+    # --- Monthly new jobs ---
+    monthly_jobs = defaultdict(int)
+    for g in gigs:
+        ca = g.get('created_at') or ''
+        try:
+            dt = datetime.datetime.fromisoformat(str(ca).replace('Z',''))
+            key = f"{dt.year}-{dt.month:02d}"
+            monthly_jobs[key] += 1
+        except Exception:
+            pass
+    job_month_labels = month_labels
+    chart_jobs = [monthly_jobs.get(m, 0) for m in month_labels]
+
+    # --- Overdue analysis ---
+    today = datetime.date.today()
+    overdue_buckets = {'0-30': [], '31-60': [], '61-90': [], '90+': []}
+    for d in invoices:
+        if d.get('status') not in ('sent', 'pending', 'overdue'):
+            continue
+        pbd = d.get('pay_by_date')
+        if not pbd:
+            continue
+        try:
+            due = datetime.date.fromisoformat(str(pbd)[:10])
+            days = (today - due).days
+            if days <= 0:
+                continue  # not overdue yet
+            if days <= 30:   overdue_buckets['0-30'].append(d)
+            elif days <= 60: overdue_buckets['31-60'].append(d)
+            elif days <= 90: overdue_buckets['61-90'].append(d)
+            else:            overdue_buckets['90+'].append(d)
+        except Exception:
+            pass
+    overdue_counts  = {k: len(v) for k, v in overdue_buckets.items()}
+    overdue_amounts = {k: sum(x.get('amount_due',0) for x in v) for k, v in overdue_buckets.items()}
+
+    # --- Avg days to pay ---
+    pay_times = []
+    for r in receipts:
+        # match receipt to its parent invoice via job_id + client_uuid
+        # approximate: use receipt created_at vs earliest invoice on same job
+        job = r.get('job_id')
+        if not job:
+            continue
+        matching_inv = [i for i in invoices if i.get('job_id') == job]
+        if not matching_inv:
+            continue
+        try:
+            inv_date = datetime.datetime.fromisoformat(matching_inv[0]['created_at'].replace('Z','')).date()
+            rec_date = datetime.datetime.fromisoformat(r['created_at'].replace('Z','')).date()
+            delta = (rec_date - inv_date).days
+            if 0 <= delta <= 365:
+                pay_times.append(delta)
+        except Exception:
+            pass
+    avg_days_to_pay = round(sum(pay_times) / len(pay_times), 1) if pay_times else None
+
+    # --- Recent activity feed ---
+    all_docs_recent = _rows_to_list(db.execute(
+        "SELECT id, doc_number, doc_type, status, created_at, amount_due, currency, client_uuid"
+        " FROM documents WHERE user_id=? AND discarded=0"
+        " ORDER BY created_at DESC LIMIT 15",
+        (uid,),
+    ).fetchall())
+    db.close()
+    for d in all_docs_recent:
+        cuuid = d.get('client_uuid')
+        d['client_name'] = labels_map.get(cuuid, '—') if cuuid else '—'
+
+    import json as _json
+    return render_template('analytics.html',
+        # stats
+        total_collected=total_collected,
+        total_invoiced=total_invoiced,
+        total_quoted=total_quoted,
+        total_outstanding=total_outstanding,
+        avg_invoice=avg_invoice,
+        collection_rate=collection_rate,
+        active_jobs=active_jobs,
+        avg_days_to_pay=avg_days_to_pay,
+        doc_counts={'invoice': len(invoices), 'quote': len(quotes), 'receipt': len(receipts)},
+        pipeline=pipeline,
+        # chart data (JSON for JS)
+        month_labels=_json.dumps(month_labels),
+        chart_collected=_json.dumps(chart_collected),
+        chart_invoiced=_json.dumps(chart_invoiced),
+        top_clients=_json.dumps(top_clients),
+        currency_totals=_json.dumps(dict(currency_totals)),
+        job_month_labels=_json.dumps(job_month_labels),
+        chart_jobs=_json.dumps(chart_jobs),
+        overdue_counts=_json.dumps(overdue_counts),
+        overdue_amounts=_json.dumps(overdue_amounts),
+        # feed
+        recent_activity=all_docs_recent,
+    )
