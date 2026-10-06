@@ -1,6 +1,6 @@
 import base64
 import json
-import csv  # analytics: per-currency FX fix
+import csv
 import io
 import os
 import re
@@ -1420,8 +1420,7 @@ def _job_overview(job_docs, anchor, job_currency=None):
          if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
         anchor,
     )
-    project_total = (active_anchor.get('project_total') or 0) or \
-        ((active_anchor['subtotal'] or 0) - (active_anchor.get('project_discount') or 0))
+    project_total = (active_anchor['subtotal'] or 0) - (active_anchor['discount'] or 0)
 
     # Invoices that are children of the anchor (not the anchor itself)
     amount_billed = sum(
@@ -1738,11 +1737,8 @@ def generate_invoice(doc_id):
         flash('Balance invoice requires a paid deposit invoice first.', 'error')
         return redirect(url_for('document_view', doc_id=doc_id))
 
-    # Compute amounts — use stored project_total/project_discount (new fields) if present,
-    # fall back to subtotal-discount for legacy docs that haven't been migrated yet.
-    project_total = (anchor.get('project_total') or 0) or \
-        ((anchor['subtotal'] or 0) - (anchor.get('project_discount') or 0))
-    project_discount = anchor.get('project_discount') or 0
+    # Compute amounts
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     deposit_amount_stored = None
     deposit_type_stored = None
@@ -1778,15 +1774,14 @@ def generate_invoice(doc_id):
         "INSERT INTO documents (doc_type, doc_number, client_uuid, date_issued, currency,"
         " line_items, subtotal, discount, tax_amount, paid_amount, amount_due, status,"
         " notes, source_document_id, user_id, job_id, invoice_type,"
-        " deposit_amount, deposit_type, pay_by_date, project_discount, project_total)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " deposit_amount, deposit_type, pay_by_date)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ('invoice', doc_number, anchor.get('client_uuid'), date.today().isoformat(),
          anchor['currency'], anchor['line_items'], anchor['subtotal'],
          anchor['discount'], anchor['tax_amount'], 0,
          amount_due, 'pending', anchor['notes'],
          doc_id, current_user.id, job_id, invoice_type,
-         deposit_amount_stored, deposit_type_stored, pay_by_date,
-         project_discount, project_total),
+         deposit_amount_stored, deposit_type_stored, pay_by_date),
     )
     invoice_id = cur.lastrowid
     db.commit()
@@ -1809,24 +1804,16 @@ def generate_receipt_from_invoice(doc_id):
         db.close()
         abort(400)
     doc_number = next_doc_number('receipt', current_user.id, current_user.doc_prefix_receipt)
-    # For deposit/balance invoices, the receipt amount = the invoice's amount_due
-    # (what the client actually owed for that instalment).
-    # For regular invoices, fall back to subtotal - discount (legacy behaviour).
-    if invoice.get('invoice_type') in ('deposit', 'balance'):
-        paid_amount = invoice.get('amount_due') or 0
-    else:
-        paid_amount = invoice['subtotal'] - invoice['discount']
+    paid_amount = invoice['subtotal'] - invoice['discount']
     cur = db.execute(
         "INSERT INTO documents (doc_type,doc_number,client_uuid,date_issued,currency,"
         "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
-        "source_document_id,user_id,job_id,invoice_type,project_discount,project_total)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "source_document_id,user_id,job_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ('receipt', doc_number, invoice.get('client_uuid'), date.today().isoformat(),
          invoice['currency'], invoice['line_items'], invoice['subtotal'],
          invoice['discount'], invoice['tax_amount'], paid_amount,
          0, 'pending', invoice['notes'], doc_id, current_user.id,
-         invoice.get('job_id'), invoice.get('invoice_type'),
-         invoice.get('project_discount') or 0, invoice.get('project_total') or 0),
+         invoice.get('job_id')),
     )
     receipt_id = cur.lastrowid
     # Update parent invoice: reflect full payment
@@ -2816,14 +2803,6 @@ def analytics():
         return (doc.get('paid_amount') or 0)
 
     def _invoice_amt(doc):
-        # Skip balance invoices entirely — the deposit invoice already captures the
-        # full project_total, so counting both would double-count every split job.
-        if doc.get('invoice_type') == 'balance':
-            return 0
-        # For deposit invoices (and standalone full invoices): use project_total if
-        # available (the agreed price after real discounts), else fall back to amount_due.
-        if doc.get('invoice_type') in ('deposit', 'full') and doc.get('project_total'):
-            return doc['project_total']
         return (doc.get('paid_amount') or 0) if doc.get('status') == 'paid' else (doc.get('amount_due') or 0)
 
     total_collected = sum(_receipt_amt(d) for d in receipts)
