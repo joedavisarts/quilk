@@ -2920,7 +2920,7 @@ def analytics():
 
     currency_totals = defaultdict(float)
     for d in invoices:
-        currency_totals[d.get('currency', 'JMD')] += _native_collected(d)
+        currency_totals[d.get('currency', 'JMD')] += _invoice_collected(d)
 
     collected_by_currency = defaultdict(float)
     for d in invoices:
