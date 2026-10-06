@@ -201,7 +201,7 @@
             <div class="an-feed-client">{{ doc.client_name }}</div>
           </div>
           <div class="an-feed-right">
-            <div class="an-feed-amount">{{ doc.currency or 'USD' }} {{ "%.0f"|format(doc.amount_due or 0) }}</div>
+            <div class="an-feed-amount">{{ doc.currency or 'USD' }} {% if doc.doc_type == 'receipt' %}{{ "%.0f"|format(doc.paid_amount or 0) }}{% else %}{{ "%.0f"|format(doc.amount_due or 0) }}{% endif %}</div>
             <div class="an-feed-status an-status-{{ doc.status }}">{{ doc.status }}</div>
           </div>
         </a>
