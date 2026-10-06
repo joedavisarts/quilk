@@ -1,6 +1,6 @@
 import base64
 import json
-import csv
+import csv  # analytics: per-currency FX fix
 import io
 import os
 import re
@@ -2861,6 +2861,15 @@ def analytics():
     for d in receipts:
         currency_totals[d.get('currency','USD')] += (d.get('paid_amount') or 0)
 
+    # Per-currency breakdowns for accurate FX conversion in JS
+    collected_by_currency = defaultdict(float)
+    for d in receipts:
+        collected_by_currency[d.get('currency','USD')] += (d.get('paid_amount') or 0)
+
+    invoiced_by_currency = defaultdict(float)
+    for d in invoices:
+        invoiced_by_currency[d.get('currency','USD')] += _invoice_amt(d)
+
     # --- Doc pipeline (all time) ---
     pipeline = {
         'quotes':   len(quotes),
@@ -2956,6 +2965,8 @@ def analytics():
         chart_invoiced=_json.dumps(chart_invoiced),
         top_clients=_json.dumps(top_clients),
         currency_totals=_json.dumps(dict(currency_totals)),
+        collected_by_currency=_json.dumps(dict(collected_by_currency)),
+        invoiced_by_currency=_json.dumps(dict(invoiced_by_currency)),
         job_month_labels=_json.dumps(job_month_labels),
         chart_jobs=_json.dumps(chart_jobs),
         overdue_counts=_json.dumps(overdue_counts),

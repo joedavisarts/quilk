@@ -19,7 +19,7 @@
   </div>
 </div>
 
-<!-- ── STAT TILES: 2 per row ── -->
+<!-- ── STAT TILES: 3-col desktop, 2-col mobile ── -->
 <div class="an-stat-grid">
   <div class="an-stat">
     <div class="an-stat-icon" style="background:rgba(144,70,214,0.15);">
@@ -88,110 +88,120 @@
   </div>
 </div>
 
-<!-- ── CHARTS: full width, one per row ── -->
-<div class="an-charts-col">
+<!-- ── DESKTOP: charts left col + activity sidebar right ── -->
+<div class="an-body-grid">
 
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">revenue over time</span>
-      <div class="an-legend">
-        <span class="an-dot" style="background:#9046d6"></span><span>collected</span>
-        <span class="an-dot" style="background:#27ae60;margin-left:12px"></span><span>invoiced</span>
+  <!-- Left: charts column -->
+  <div class="an-charts-col">
+
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">revenue over time</span>
+        <div class="an-legend">
+          <span class="an-dot" style="background:#9046d6"></span><span>collected</span>
+          <span class="an-dot" style="background:#27ae60;margin-left:12px"></span><span>invoiced</span>
+        </div>
+      </div>
+      <div class="an-chart-wrap" style="height:240px;">
+        <canvas id="revenueChart"></canvas>
       </div>
     </div>
-    <div class="an-chart-wrap" style="height:240px;">
-      <canvas id="revenueChart"></canvas>
-    </div>
-  </div>
 
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">top clients</span>
-      <span class="an-card-sub">by collected</span>
-    </div>
-    <div class="an-chart-wrap" style="height:260px;">
-      <canvas id="clientChart"></canvas>
-    </div>
-  </div>
-
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">currency split</span>
-      <span class="an-card-sub">collected (native amounts)</span>
-    </div>
-    <div class="an-chart-wrap" style="height:240px;">
-      <canvas id="currencyChart"></canvas>
-    </div>
-  </div>
-
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">document pipeline</span>
-      <span class="an-card-sub">all time</span>
-    </div>
-    <div class="an-pipeline">
-      <div class="an-pipe-step">
-        <div class="an-pipe-val" style="color:#9046d6">{{ pipeline.quotes }}</div>
-        <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#9046d6;width:{% if pipeline.quotes %}{{ [100, pipeline.quotes / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
-        <div class="an-pipe-label">quotes</div>
+    <!-- Desktop: top clients + currency side-by-side in 2-col sub-row -->
+    <div class="an-two-col">
+      <div class="an-card">
+        <div class="an-card-header">
+          <span class="an-card-title">top clients</span>
+          <span class="an-card-sub">by collected</span>
+        </div>
+        <div class="an-chart-wrap" style="height:220px;">
+          <canvas id="clientChart"></canvas>
+        </div>
       </div>
-      <div class="an-pipe-arrow">→</div>
-      <div class="an-pipe-step">
-        <div class="an-pipe-val" style="color:#e74c3c">{{ pipeline.invoices }}</div>
-        <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#e74c3c;width:{% if pipeline.invoices %}{{ [100, pipeline.invoices / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
-        <div class="an-pipe-label">invoices</div>
-      </div>
-      <div class="an-pipe-arrow">→</div>
-      <div class="an-pipe-step">
-        <div class="an-pipe-val" style="color:#27ae60">{{ pipeline.receipts }}</div>
-        <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#27ae60;width:{% if pipeline.receipts %}{{ [100, pipeline.receipts / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
-        <div class="an-pipe-label">receipts</div>
+
+      <div class="an-card">
+        <div class="an-card-header">
+          <span class="an-card-title">currency split</span>
+          <span class="an-card-sub">collected (native)</span>
+        </div>
+        <div class="an-chart-wrap" style="height:220px;">
+          <canvas id="currencyChart"></canvas>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">overdue invoices</span>
-      <span class="an-card-sub">by age</span>
-    </div>
-    <div class="an-chart-wrap" style="height:200px;">
-      <canvas id="overdueChart"></canvas>
-    </div>
-  </div>
-
-  <div class="an-card">
-    <div class="an-card-header">
-      <span class="an-card-title">new jobs per month</span>
-    </div>
-    <div class="an-chart-wrap" style="height:200px;">
-      <canvas id="jobsChart"></canvas>
-    </div>
-  </div>
-
-</div>
-
-<!-- ── RECENT ACTIVITY: full width at bottom ── -->
-<div class="an-card" style="margin-top:16px;">
-  <div class="an-card-header">
-    <span class="an-card-title">recent activity</span>
-  </div>
-  <div class="an-feed">
-    {% for doc in recent_activity %}
-    <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="an-feed-item">
-      <span class="an-feed-badge an-badge-{{ doc.doc_type }}">{{ doc.doc_type[:3].upper() }}</span>
-      <div class="an-feed-body">
-        <div class="an-feed-num">{{ doc.doc_number }}</div>
-        <div class="an-feed-client">{{ doc.client_name }}</div>
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">document pipeline</span>
+        <span class="an-card-sub">all time</span>
       </div>
-      <div class="an-feed-right">
-        <div class="an-feed-amount">{{ doc.currency or 'USD' }} {% if doc.doc_type == 'receipt' %}{{ "%.0f"|format(doc.paid_amount or 0) }}{% else %}{{ "%.0f"|format(doc.amount_due or 0) }}{% endif %}</div>
-        <div class="an-feed-status an-status-{{ doc.status }}">{{ doc.status }}</div>
+      <div class="an-pipeline">
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#9046d6">{{ pipeline.quotes }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#9046d6;width:{% if pipeline.quotes %}{{ [100, pipeline.quotes / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">quotes</div>
+        </div>
+        <div class="an-pipe-arrow">→</div>
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#e74c3c">{{ pipeline.invoices }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#e74c3c;width:{% if pipeline.invoices %}{{ [100, pipeline.invoices / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">invoices</div>
+        </div>
+        <div class="an-pipe-arrow">→</div>
+        <div class="an-pipe-step">
+          <div class="an-pipe-val" style="color:#27ae60">{{ pipeline.receipts }}</div>
+          <div class="an-pipe-bar-wrap"><div class="an-pipe-bar" style="background:#27ae60;width:{% if pipeline.receipts %}{{ [100, pipeline.receipts / [pipeline.quotes,pipeline.invoices,pipeline.receipts]|max * 100]|min|round }}%{% else %}0%{% endif %}"></div></div>
+          <div class="an-pipe-label">receipts</div>
+        </div>
       </div>
-    </a>
-    {% endfor %}
-  </div>
-</div>
+    </div>
+
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">overdue invoices</span>
+        <span class="an-card-sub">by age</span>
+      </div>
+      <div class="an-chart-wrap" style="height:200px;">
+        <canvas id="overdueChart"></canvas>
+      </div>
+    </div>
+
+    <div class="an-card">
+      <div class="an-card-header">
+        <span class="an-card-title">new jobs per month</span>
+      </div>
+      <div class="an-chart-wrap" style="height:200px;">
+        <canvas id="jobsChart"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /an-charts-col -->
+
+  <!-- Right: activity feed sidebar -->
+  <div class="an-sidebar">
+    <div class="an-card" style="height:100%;">
+      <div class="an-card-header">
+        <span class="an-card-title">recent activity</span>
+      </div>
+      <div class="an-feed">
+        {% for doc in recent_activity %}
+        <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="an-feed-item">
+          <span class="an-feed-badge an-badge-{{ doc.doc_type }}">{{ doc.doc_type[:3].upper() }}</span>
+          <div class="an-feed-body">
+            <div class="an-feed-num">{{ doc.doc_number }}</div>
+            <div class="an-feed-client">{{ doc.client_name }}</div>
+          </div>
+          <div class="an-feed-right">
+            <div class="an-feed-amount">{{ doc.currency or 'USD' }} {% if doc.doc_type == 'receipt' %}{{ "%.0f"|format(doc.paid_amount or 0) }}{% else %}{{ "%.0f"|format(doc.amount_due or 0) }}{% endif %}</div>
+            <div class="an-feed-status an-status-{{ doc.status }}">{{ doc.status }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div><!-- /an-sidebar -->
+
+</div><!-- /an-body-grid -->
 
 {% endblock %}
 
@@ -205,55 +215,30 @@ const ORANGE = '#e67e22';
 const RED    = '#e74c3c';
 const TEAL   = '#1abc9c';
 
-// ── RAW DATA: per-currency buckets from server ──
-// currencyData = { JMD: 833050, USD: 1200, ... } — native amounts collected per currency
-const currencyData  = {{ currency_totals|safe }};
-
-// These top-level totals are mixed-currency raw sums — used only after FX conversion
-const RAW_COLLECTED   = {{ total_collected }};
-const RAW_INVOICED    = {{ total_invoiced }};
-const RAW_OUTSTANDING = {{ total_outstanding }};
-const RAW_AVG_INVOICE = {{ avg_invoice }};
-
-const monthLabels   = {{ month_labels|safe }};
-const rawCollected  = {{ chart_collected|safe }};  // mixed currency per month
-const rawInvoiced   = {{ chart_invoiced|safe }};
-const rawTopClients = {{ top_clients|safe }};
-const jobData       = {{ chart_jobs|safe }};
-const overdueC      = {{ overdue_counts|safe }};
-const overdueA      = {{ overdue_amounts|safe }};
-
-// ── FX RATES (all relative to JMD base, since most income is JMD) ──
-// e.g. 1 JMD = 0.00633 USD  →  1 USD = 158 JMD
-const FX_TO_JMD = {
-  JMD: 1,
-  USD: 158.0,
-  GBP: 200.0,
-  EUR: 172.0,
-  CAD: 116.0,
+// ── FX RATES (USD base: 1 USD = X native) ──
+// To convert native → USD: divide by rate
+// To convert native → display: (native / nativeRate) * displayRate
+const FX = {
+  USD: 1,
+  JMD: 158.0,
+  GBP: 0.787,
+  EUR: 0.918,
+  CAD: 1.353,
 };
 
 const SYMBOLS = { USD:'$', JMD:'J$', GBP:'£', EUR:'€', CAD:'CA$' };
 
 let currentCurrency = 'JMD';
 
-// Convert a JMD-base value to the selected display currency
-function toDisplay(jmdVal) {
-  return jmdVal / FX_TO_JMD[currentCurrency];
+// Convert an amount in nativeCur to the display currency
+function toDisplay(amount, nativeCur) {
+  const usd = amount / (FX[nativeCur] || 1);          // → USD
+  return usd * (FX[currentCurrency] || 1);             // → display currency
 }
 
-// Convert a native-currency amount to JMD first, then to display currency
-// Used for per-currency tile totals
-function nativeToDisplay(amount, nativeCur) {
-  const inJmd = amount * (FX_TO_JMD[nativeCur] || 1);
-  return toDisplay(inJmd);
-}
-
-// Sum all currency buckets converted to display currency
-function totalInDisplay(rawMixedSum) {
-  // rawMixedSum is already a JMD-equivalent mixed sum from the server
-  // We treat it as JMD base and convert
-  return toDisplay(rawMixedSum);
+// Sum a per-currency dict { JMD: X, USD: Y, ... } into the display currency
+function sumByCurrency(byCur) {
+  return Object.entries(byCur).reduce((sum, [cur, amt]) => sum + toDisplay(amt, cur), 0);
 }
 
 function fmt(val) {
@@ -261,13 +246,33 @@ function fmt(val) {
   return sym + Math.round(val).toLocaleString();
 }
 
+// ── SERVER DATA ──
+// Per-currency breakdowns for accurate tile totals
+const collectedByCur  = {{ collected_by_currency|safe }};
+const invoicedByCur   = {{ invoiced_by_currency|safe }};
+// Mixed-currency raw sums (JMD+USD together) — used only for outstanding/avg
+// We convert as-if-JMD (most income is JMD; small USD % is a known approximation)
+const RAW_OUTSTANDING = {{ total_outstanding }};   // JMD-dominant
+const RAW_AVG_INVOICE = {{ avg_invoice }};         // JMD-dominant
+
+// Currency donut (native splits — no FX, shows proportion)
+const currencyData  = {{ currency_totals|safe }};
+
+const monthLabels   = {{ month_labels|safe }};
+const rawCollected  = {{ chart_collected|safe }};  // mixed-currency per month
+const rawInvoiced   = {{ chart_invoiced|safe }};
+const rawTopClients = {{ top_clients|safe }};
+const jobData       = {{ chart_jobs|safe }};
+const overdueC      = {{ overdue_counts|safe }};
+const overdueA      = {{ overdue_amounts|safe }};
+
 // ── TILES ──
 function updateTiles() {
-  // Convert totals: server sums are mixed raw — convert via JMD base
-  document.getElementById('tile-collected').textContent   = fmt(totalInDisplay(RAW_COLLECTED));
-  document.getElementById('tile-invoiced').textContent    = fmt(totalInDisplay(RAW_INVOICED));
-  document.getElementById('tile-outstanding').textContent = fmt(totalInDisplay(RAW_OUTSTANDING));
-  document.getElementById('tile-avg-invoice').textContent = fmt(totalInDisplay(RAW_AVG_INVOICE));
+  document.getElementById('tile-collected').textContent   = fmt(sumByCurrency(collectedByCur));
+  document.getElementById('tile-invoiced').textContent    = fmt(sumByCurrency(invoicedByCur));
+  // Outstanding and avg invoice: JMD-dominant, treat as JMD
+  document.getElementById('tile-outstanding').textContent = fmt(toDisplay(RAW_OUTSTANDING, 'JMD'));
+  document.getElementById('tile-avg-invoice').textContent = fmt(toDisplay(RAW_AVG_INVOICE, 'JMD'));
 }
 
 // ── CHARTS ──
@@ -276,6 +281,7 @@ Chart.defaults.borderColor = '#2a2a2a';
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.font.size = 13;
 
+// Monthly chart: mixed-currency — treat as JMD (dominant currency)
 const revenueChart = new Chart(document.getElementById('revenueChart'), {
   type: 'line',
   data: {
@@ -283,14 +289,14 @@ const revenueChart = new Chart(document.getElementById('revenueChart'), {
     datasets: [
       {
         label: 'Collected',
-        data: rawCollected.map(v => Math.round(toDisplay(v))),
+        data: rawCollected.map(v => Math.round(toDisplay(v, 'JMD'))),
         borderColor: PURPLE,
         backgroundColor: 'rgba(144,70,214,0.08)',
         fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
       },
       {
         label: 'Invoiced',
-        data: rawInvoiced.map(v => Math.round(toDisplay(v))),
+        data: rawInvoiced.map(v => Math.round(toDisplay(v, 'JMD'))),
         borderColor: GREEN,
         backgroundColor: 'rgba(39,174,96,0.06)',
         fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
@@ -314,7 +320,7 @@ const clientChart = new Chart(document.getElementById('clientChart'), {
   data: {
     labels: rawTopClients.map(c => c[0].length > 20 ? c[0].slice(0,18)+'…' : c[0]),
     datasets: [{
-      data: rawTopClients.map(c => Math.round(toDisplay(c[1]))),
+      data: rawTopClients.map(c => Math.round(toDisplay(c[1], 'JMD'))),
       backgroundColor: [PURPLE,'#7D2ED1','#a860e8','#c090f0',BLUE,TEAL,GREEN,ORANGE],
       borderRadius: 4, borderSkipped: false,
     }]
@@ -332,7 +338,7 @@ const clientChart = new Chart(document.getElementById('clientChart'), {
   }
 });
 
-// Currency donut — shows native amounts per currency (no FX, that's the point)
+// Currency donut — shows native amounts per currency (proportional, no FX)
 const currKeys = Object.keys(currencyData);
 const currVals = currKeys.map(k => currencyData[k]);
 const currencyChart = new Chart(document.getElementById('currencyChart'), {
@@ -364,7 +370,7 @@ const overdueChart = new Chart(document.getElementById('overdueChart'), {
     labels: overdueLabels,
     datasets: [{
       label: 'Amount',
-      data: rawOverdueAmts.map(v => Math.round(toDisplay(v))),
+      data: rawOverdueAmts.map(v => Math.round(toDisplay(v, 'JMD'))),
       backgroundColor: [GREEN, ORANGE, RED, '#8e1010'],
       borderRadius: 4,
     }]
@@ -410,17 +416,17 @@ function setCurrency(cur) {
   currentCurrency = cur;
   updateTiles();
 
-  revenueChart.data.datasets[0].data = rawCollected.map(v => Math.round(toDisplay(v)));
-  revenueChart.data.datasets[1].data = rawInvoiced.map(v => Math.round(toDisplay(v)));
+  revenueChart.data.datasets[0].data = rawCollected.map(v => Math.round(toDisplay(v, 'JMD')));
+  revenueChart.data.datasets[1].data = rawInvoiced.map(v => Math.round(toDisplay(v, 'JMD')));
   revenueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur] + v.toLocaleString();
   revenueChart.update();
 
-  clientChart.data.datasets[0].data = rawTopClients.map(c => Math.round(toDisplay(c[1])));
+  clientChart.data.datasets[0].data = rawTopClients.map(c => Math.round(toDisplay(c[1], 'JMD')));
   clientChart.options.scales.x.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
   clientChart.options.plugins.tooltip.callbacks.label = ctx => ' ' + SYMBOLS[cur] + ctx.raw.toLocaleString();
   clientChart.update();
 
-  overdueChart.data.datasets[0].data = rawOverdueAmts.map(v => Math.round(toDisplay(v)));
+  overdueChart.data.datasets[0].data = rawOverdueAmts.map(v => Math.round(toDisplay(v, 'JMD')));
   overdueChart.options.scales.y.ticks.callback = v => SYMBOLS[cur]+v.toLocaleString();
   overdueChart.update();
 }
@@ -439,10 +445,10 @@ updateTiles();
 }
 .an-currency-select:hover, .an-currency-select:focus { border-color:#9046d6; }
 
-/* 2-col stat grid */
+/* ── STAT TILES: 3-col desktop default ── */
 .an-stat-grid {
   display:grid;
-  grid-template-columns:repeat(2, 1fr);
+  grid-template-columns:repeat(3, 1fr);
   gap:14px;
   margin-bottom:24px;
 }
@@ -467,8 +473,22 @@ updateTiles();
 .an-stat-value.an-warn { color:#e67e22; }
 .an-stat-sub { font-size:12px; color:var(--text-muted); }
 
-/* full-width single-col charts */
+/* ── BODY: charts left + sidebar right (desktop) ── */
+.an-body-grid {
+  display:grid;
+  grid-template-columns:1fr 320px;
+  gap:16px;
+  align-items:start;
+}
 .an-charts-col { display:flex; flex-direction:column; gap:16px; }
+.an-sidebar { position:sticky; top:80px; }
+
+/* ── 2-col sub-row inside charts col (top clients + currency) ── */
+.an-two-col {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
 
 .an-chart-wrap { position:relative; width:100%; }
 .an-chart-wrap canvas { position:absolute; top:0; left:0; width:100% !important; height:100% !important; }
@@ -512,12 +532,28 @@ updateTiles();
 .an-status-draft   { color:var(--text-dim); }
 .an-status-voided  { color:var(--text-dim); }
 
-@media (max-width: 600px) {
-  .an-stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+/* ── MOBILE: 2-col tiles, full-width stacked charts, feed at bottom ── */
+@media (max-width: 768px) {
+  .an-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
   .an-stat { padding: 14px 12px; gap: 10px; }
   .an-stat-value { font-size: 18px; }
   .an-stat-icon { width: 36px; height: 36px; }
   .an-stat-icon svg { width: 18px; height: 18px; }
+
+  /* Stack body grid: charts then sidebar below */
+  .an-body-grid {
+    grid-template-columns: 1fr;
+  }
+  .an-sidebar {
+    position: static;
+  }
+  /* Full-width 2-col sub-row → single col */
+  .an-two-col {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 {% endblock %}
