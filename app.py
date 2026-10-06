@@ -2798,7 +2798,8 @@ def analytics():
 
     # All non-voided, non-discarded documents for this user
     docs = _rows_to_list(db.execute(
-        "SELECT doc_type, status, subtotal, discount, tax_amount, paid_amount, amount_due,"
+        "SELECT doc_number, doc_type, invoice_type, status, subtotal, discount,"
+        " project_discount, project_total, tax_amount, paid_amount, amount_due,"
         " currency, created_at, pay_by_date, client_uuid, job_id, voided, discarded"
         " FROM documents"
         " WHERE user_id=? AND voided=0 AND discarded=0"
@@ -2812,35 +2813,48 @@ def analytics():
     quotes   = [d for d in docs if d['doc_type'] == 'quote']
 
     # --- Top-level stats ---
+    # FX rates: all amounts stored in native currency, convert to JMD for analytics.
+    # Must match the rates in analytics.html JS.
+    _FX = {'USD': 1, 'JMD': 158.0, 'GBP': 0.787, 'EUR': 0.918, 'CAD': 1.353}
+
+    def _to_jmd(amount, currency):
+        cur = currency or 'JMD'
+        return (amount / _FX.get(cur, 1)) * 158.0
+
     def _invoice_amt(doc):
-        # Receipts are excluded from analytics entirely — paid invoices are the
-        # source of truth. Receipts are confirmations, not separate revenue events.
-        #
-        # Skip balance invoices — the deposit invoice already captures project_total,
-        # so counting both would double-count every split job.
+        # Skip balance invoices — deposit already captures the full project_total.
         if doc.get('invoice_type') == 'balance':
             return 0
-        # Use project_total for all invoice types (the agreed price after real discounts).
-        # Fall back to subtotal for legacy invoices with no project_total set.
         pt = doc.get('project_total') or 0
-        return pt if pt else (doc.get('subtotal') or 0)
+        amt = pt if pt else (doc.get('subtotal') or 0)
+        return _to_jmd(amt, doc.get('currency'))
 
     def _invoice_collected(doc):
-        # Amount actually collected from a paid invoice (no receipts).
+        # Amount actually collected — only paid invoices, no receipts, no balance.
         if doc.get('status') != 'paid':
             return 0
         if doc.get('invoice_type') == 'balance':
             return 0
         pt = doc.get('project_total') or 0
-        return pt if pt else (doc.get('subtotal') or 0)
+        amt = pt if pt else (doc.get('subtotal') or 0)
+        return _to_jmd(amt, doc.get('currency'))
+
+    def _invoice_outstanding(doc):
+        # Outstanding = sent/pending non-balance invoices, using amount_due.
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        if doc.get('status') not in ('sent', 'pending'):
+            return 0
+        amt = doc.get('amount_due') or 0
+        return _to_jmd(amt, doc.get('currency'))
 
     total_collected = sum(_invoice_collected(d) for d in invoices)
     total_invoiced  = sum(_invoice_amt(d) for d in invoices)
+    total_outstanding = sum(_invoice_outstanding(d) for d in invoices)
     total_quoted    = sum((d.get('subtotal', 0) - d.get('discount', 0)) for d in quotes)
 
-    # Outstanding from gigs
+    # Gigs still needed for active_jobs count
     gigs = _sb_gigs_for_user(uid, include_discarded=False)
-    total_outstanding = sum((g.get('amount_outstanding') or 0) for g in gigs if not g.get('discarded'))
 
     avg_invoice = (total_invoiced / len(invoices)) if invoices else 0
     collection_rate = (total_collected / total_invoiced * 100) if total_invoiced else 0
