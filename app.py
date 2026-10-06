@@ -2785,7 +2785,7 @@ def analytics():
 
     # All non-voided, non-discarded documents for this user
     docs = _rows_to_list(db.execute(
-        "SELECT doc_type, status, subtotal, discount, tax_amount, paid_amount, amount_due,"
+        "SELECT doc_type, invoice_type, status, subtotal, discount, project_discount, project_total, tax_amount, paid_amount, amount_due,"
         " currency, created_at, pay_by_date, client_uuid, job_id, voided, discarded"
         " FROM documents"
         " WHERE user_id=? AND voided=0 AND discarded=0"
