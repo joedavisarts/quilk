@@ -2799,13 +2799,23 @@ def analytics():
     quotes   = [d for d in docs if d['doc_type'] == 'quote']
 
     # --- Top-level stats ---
-    def _receipt_amt(doc):
-        return (doc.get('paid_amount') or 0)
-
     def _invoice_amt(doc):
-        return (doc.get('paid_amount') or 0) if doc.get('status') == 'paid' else (doc.get('amount_due') or 0)
+        # Skip balance invoices — deposit already captures the full project_total.
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        pt = doc.get('project_total') or 0
+        return pt if pt else (doc.get('subtotal') or 0)
 
-    total_collected = sum(_receipt_amt(d) for d in receipts)
+    def _invoice_collected(doc):
+        # Amount actually collected — only paid invoices, no receipts, no balance.
+        if doc.get('status') != 'paid':
+            return 0
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        pt = doc.get('project_total') or 0
+        return pt if pt else (doc.get('subtotal') or 0)
+
+    total_collected = sum(_invoice_collected(d) for d in invoices)
     total_invoiced  = sum(_invoice_amt(d) for d in invoices)
     total_quoted    = sum((d.get('subtotal', 0) - d.get('discount', 0)) for d in quotes)
 
@@ -2827,11 +2837,11 @@ def analytics():
 
     monthly_collected = defaultdict(float)
     monthly_invoiced  = defaultdict(float)
-    for d in receipts:
+    for d in invoices:
         try:
             dt = datetime.datetime.fromisoformat(d['created_at'].replace('Z',''))
             key = (dt.year, dt.month)
-            monthly_collected[key] += (d.get('paid_amount') or 0)
+            monthly_collected[key] += _invoice_collected(d)
         except Exception:
             pass
     for d in invoices:
@@ -2850,21 +2860,21 @@ def analytics():
     client_map = _sb_client_map(uid, include_discarded=True)
     labels_map = _client_display_labels_from_list(list(client_map.values()))
     client_revenue = defaultdict(float)
-    for d in receipts:
+    for d in invoices:
         cuuid = d.get('client_uuid')
         name = labels_map.get(cuuid, 'Unknown') if cuuid else 'Unknown'
-        client_revenue[name] += (d.get('paid_amount') or 0)
+        client_revenue[name] += _invoice_collected(d)
     top_clients = sorted(client_revenue.items(), key=lambda x: x[1], reverse=True)[:8]
 
     # --- Currency split ---
     currency_totals = defaultdict(float)
-    for d in receipts:
-        currency_totals[d.get('currency','USD')] += (d.get('paid_amount') or 0)
+    for d in invoices:
+        currency_totals[d.get('currency','USD')] += _invoice_collected(d)
 
     # Per-currency breakdowns for accurate FX conversion in JS
     collected_by_currency = defaultdict(float)
-    for d in receipts:
-        collected_by_currency[d.get('currency','USD')] += (d.get('paid_amount') or 0)
+    for d in invoices:
+        collected_by_currency[d.get('currency','USD')] += _invoice_collected(d)
 
     invoiced_by_currency = defaultdict(float)
     for d in invoices:
