@@ -2821,7 +2821,14 @@ def analytics():
 
     # Outstanding from gigs
     gigs = _sb_gigs_for_user(uid, include_discarded=False)
-    total_outstanding = sum((g.get('amount_outstanding') or 0) for g in gigs if not g.get('discarded'))
+    # Outstanding: sum amount_due from sent/pending non-balance invoices (not from gigs, which may be stale)
+    def _invoice_outstanding(doc):
+        if doc.get('invoice_type') == 'balance':
+            return 0
+        if doc.get('status') not in ('sent', 'pending'):
+            return 0
+        return doc.get('amount_due') or 0
+    total_outstanding = sum(_invoice_outstanding(d) for d in invoices)
 
     avg_invoice = (total_invoiced / len(invoices)) if invoices else 0
     collection_rate = (total_collected / total_invoiced * 100) if total_invoiced else 0
