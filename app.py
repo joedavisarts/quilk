@@ -1,6 +1,6 @@
 import base64
 import json
-import csv  # analytics: per-currency FX fix
+import csv
 import io
 import os
 import re
@@ -1420,8 +1420,7 @@ def _job_overview(job_docs, anchor, job_currency=None):
          if not d.get('source_document_id') and d['doc_type'] in ('quote', 'invoice')),
         anchor,
     )
-    project_total = (active_anchor.get('project_total') or 0) or \
-        ((active_anchor['subtotal'] or 0) - (active_anchor.get('project_discount') or 0))
+    project_total = (active_anchor['subtotal'] or 0) - (active_anchor['discount'] or 0)
 
     # Invoices that are children of the anchor (not the anchor itself)
     amount_billed = sum(
@@ -1738,11 +1737,8 @@ def generate_invoice(doc_id):
         flash('Balance invoice requires a paid deposit invoice first.', 'error')
         return redirect(url_for('document_view', doc_id=doc_id))
 
-    # Compute amounts — use stored project_total/project_discount (new fields) if present,
-    # fall back to subtotal-discount for legacy docs that haven't been migrated yet.
-    project_total = (anchor.get('project_total') or 0) or \
-        ((anchor['subtotal'] or 0) - (anchor.get('project_discount') or 0))
-    project_discount = anchor.get('project_discount') or 0
+    # Compute amounts
+    project_total = (anchor['subtotal'] or 0) - (anchor['discount'] or 0)
 
     deposit_amount_stored = None
     deposit_type_stored = None
@@ -1778,15 +1774,14 @@ def generate_invoice(doc_id):
         "INSERT INTO documents (doc_type, doc_number, client_uuid, date_issued, currency,"
         " line_items, subtotal, discount, tax_amount, paid_amount, amount_due, status,"
         " notes, source_document_id, user_id, job_id, invoice_type,"
-        " deposit_amount, deposit_type, pay_by_date, project_discount, project_total)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " deposit_amount, deposit_type, pay_by_date)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ('invoice', doc_number, anchor.get('client_uuid'), date.today().isoformat(),
          anchor['currency'], anchor['line_items'], anchor['subtotal'],
          anchor['discount'], anchor['tax_amount'], 0,
          amount_due, 'pending', anchor['notes'],
          doc_id, current_user.id, job_id, invoice_type,
-         deposit_amount_stored, deposit_type_stored, pay_by_date,
-         project_discount, project_total),
+         deposit_amount_stored, deposit_type_stored, pay_by_date),
     )
     invoice_id = cur.lastrowid
     db.commit()
@@ -1809,24 +1804,16 @@ def generate_receipt_from_invoice(doc_id):
         db.close()
         abort(400)
     doc_number = next_doc_number('receipt', current_user.id, current_user.doc_prefix_receipt)
-    # For deposit/balance invoices, the receipt amount = the invoice's amount_due
-    # (what the client actually owed for that instalment).
-    # For regular invoices, fall back to subtotal - discount (legacy behaviour).
-    if invoice.get('invoice_type') in ('deposit', 'balance'):
-        paid_amount = invoice.get('amount_due') or 0
-    else:
-        paid_amount = invoice['subtotal'] - invoice['discount']
+    paid_amount = invoice['subtotal'] - invoice['discount']
     cur = db.execute(
         "INSERT INTO documents (doc_type,doc_number,client_uuid,date_issued,currency,"
         "line_items,subtotal,discount,tax_amount,paid_amount,amount_due,status,notes,"
-        "source_document_id,user_id,job_id,invoice_type,project_discount,project_total)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "source_document_id,user_id,job_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ('receipt', doc_number, invoice.get('client_uuid'), date.today().isoformat(),
          invoice['currency'], invoice['line_items'], invoice['subtotal'],
          invoice['discount'], invoice['tax_amount'], paid_amount,
          0, 'pending', invoice['notes'], doc_id, current_user.id,
-         invoice.get('job_id'), invoice.get('invoice_type'),
-         invoice.get('project_discount') or 0, invoice.get('project_total') or 0),
+         invoice.get('job_id')),
     )
     receipt_id = cur.lastrowid
     # Update parent invoice: reflect full payment
@@ -2798,8 +2785,7 @@ def analytics():
 
     # All non-voided, non-discarded documents for this user
     docs = _rows_to_list(db.execute(
-        "SELECT doc_number, doc_type, invoice_type, status, subtotal, discount,"
-        " project_discount, project_total, tax_amount, paid_amount, amount_due,"
+        "SELECT doc_type, invoice_type, status, subtotal, discount, project_discount, project_total, tax_amount, paid_amount, amount_due,"
         " currency, created_at, pay_by_date, client_uuid, job_id, voided, discarded"
         " FROM documents"
         " WHERE user_id=? AND voided=0 AND discarded=0"
@@ -2813,8 +2799,6 @@ def analytics():
     quotes   = [d for d in docs if d['doc_type'] == 'quote']
 
     # --- Top-level stats ---
-    # FX rates: all amounts stored in native currency, convert to JMD for analytics.
-    # Must match the rates in analytics.html JS.
     _FX = {'USD': 1, 'JMD': 158.0, 'GBP': 0.787, 'EUR': 0.918, 'CAD': 1.353}
 
     def _to_jmd(amount, currency):
@@ -2839,22 +2823,22 @@ def analytics():
         amt = pt if pt else (doc.get('subtotal') or 0)
         return _to_jmd(amt, doc.get('currency'))
 
+    total_collected = sum(_invoice_collected(d) for d in invoices)
+    total_invoiced  = sum(_invoice_amt(d) for d in invoices)
+    total_quoted    = sum((d.get('subtotal', 0) - d.get('discount', 0)) for d in quotes)
+
+    # Outstanding from gigs
+    gigs = _sb_gigs_for_user(uid, include_discarded=False)
+    # Outstanding: sum amount_due from sent/pending non-balance invoices, converted to JMD
     def _invoice_outstanding(doc):
-        # Outstanding = sent/pending non-balance invoices, using amount_due.
         if doc.get('invoice_type') == 'balance':
             return 0
         if doc.get('status') not in ('sent', 'pending'):
             return 0
         amt = doc.get('amount_due') or 0
-        return _to_jmd(amt, doc.get('currency'))
-
-    total_collected = sum(_invoice_collected(d) for d in invoices)
-    total_invoiced  = sum(_invoice_amt(d) for d in invoices)
+        cur = doc.get('currency') or 'JMD'
+        return (amt / _FX.get(cur, 1)) * 158.0
     total_outstanding = sum(_invoice_outstanding(d) for d in invoices)
-    total_quoted    = sum((d.get('subtotal', 0) - d.get('discount', 0)) for d in quotes)
-
-    # Gigs still needed for active_jobs count
-    gigs = _sb_gigs_for_user(uid, include_discarded=False)
 
     avg_invoice = (total_invoiced / len(invoices)) if invoices else 0
     collection_rate = (total_collected / total_invoiced * 100) if total_invoiced else 0
@@ -2864,10 +2848,8 @@ def analytics():
     now = datetime.datetime.utcnow()
     months = []
     for i in range(12, -1, -1):
-        # Step back i months from current month using safe arithmetic
-        total_months = now.year * 12 + (now.month - 1) - i
-        y = total_months // 12
-        m = total_months % 12 + 1
+        m = (now.month - i - 1) % 12 + 1
+        y = now.year - ((now.month - i - 1) // 12)
         months.append((y, m))
 
     monthly_collected = defaultdict(float)
@@ -2902,33 +2884,18 @@ def analytics():
     top_clients = sorted(client_revenue.items(), key=lambda x: x[1], reverse=True)[:8]
 
     # --- Currency split ---
-    # Per-currency breakdowns — must be NATIVE amounts per currency (not JMD-converted).
-    # The JS sumByCurrency() handles FX conversion itself using the FX table.
-    def _native_amt(doc):
-        if doc.get('invoice_type') == 'balance':
-            return 0
-        pt = doc.get('project_total') or 0
-        return pt if pt else (doc.get('subtotal') or 0)
-
-    def _native_collected(doc):
-        if doc.get('status') != 'paid':
-            return 0
-        if doc.get('invoice_type') == 'balance':
-            return 0
-        pt = doc.get('project_total') or 0
-        return pt if pt else (doc.get('subtotal') or 0)
-
     currency_totals = defaultdict(float)
     for d in invoices:
-        currency_totals[d.get('currency', 'JMD')] += _native_collected(d)
+        currency_totals[d.get('currency','USD')] += _invoice_collected(d)
 
+    # Per-currency breakdowns for accurate FX conversion in JS
     collected_by_currency = defaultdict(float)
     for d in invoices:
-        collected_by_currency[d.get('currency', 'JMD')] += _native_collected(d)
+        collected_by_currency[d.get('currency','USD')] += _invoice_collected(d)
 
     invoiced_by_currency = defaultdict(float)
     for d in invoices:
-        invoiced_by_currency[d.get('currency', 'JMD')] += _native_amt(d)
+        invoiced_by_currency[d.get('currency','USD')] += _invoice_amt(d)
 
     # --- Doc pipeline (all time) ---
     pipeline = {
