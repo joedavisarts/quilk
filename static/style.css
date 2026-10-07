@@ -15,6 +15,21 @@
   --success: #27ae60;
 }
 
+
+/* ===== LIGHT MODE OVERRIDES ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --black: #f4f4f0;
+    --sidebar-bg: #ffffff;
+    --card-bg: #ffffff;
+    --surface: #ededea;
+    --border: #ddddd8;
+    --text: #1a1a1a;
+    --text-muted: #666666;
+    --text-dim: #999999;
+  }
+}
+
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }

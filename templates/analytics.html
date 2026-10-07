@@ -304,8 +304,18 @@ function renderTiles(totalColl, totalInv, totalCnt, isDefault) {
 }
 
 // ── CHARTS ──
-Chart.defaults.color = '#888';
-Chart.defaults.borderColor = '#2a2a2a';
+function getChartColors() {
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return {
+    text:  dark ? '#888'    : '#666',
+    grid:  dark ? '#1e1e1e' : '#e4e4e0',
+    border:dark ? '#2a2a2a' : '#d8d8d4',
+    dotBg: dark ? '#0E0E0E' : '#f4f4f0',
+  };
+}
+const _cc = getChartColors();
+Chart.defaults.color = _cc.text;
+Chart.defaults.borderColor = _cc.border;
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.font.size = 13;
 
@@ -338,7 +348,7 @@ const revenueChart = new Chart(document.getElementById('revenueChart'), {
     plugins: { legend: { display: false } },
     scales: {
       x: {
-        grid: { color: '#1e1e1e' },
+        grid: { color: getChartColors().grid },
         ticks: {
           maxTicksLimit: 6, maxRotation: 0, autoSkip: true,
           callback: function(val, idx) {
@@ -349,7 +359,7 @@ const revenueChart = new Chart(document.getElementById('revenueChart'), {
           }
         }
       },
-      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => fmtAxis(currentCurrency, v) } }
+      y: { grid: { color: getChartColors().grid }, ticks: { callback: v => fmtAxis(currentCurrency, v) } }
     }
   }
 });
@@ -371,7 +381,7 @@ const clientChart = new Chart(document.getElementById('clientChart'), {
       tooltip: { callbacks: { label: ctx => ' ' + SYMBOLS[currentCurrency] + ctx.raw.toLocaleString() }}
     },
     scales: {
-      x: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } },
+      x: { grid: { color: getChartColors().grid }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } },
       y: { grid: { display: false } }
     }
   }
@@ -387,7 +397,7 @@ const currencyChart = new Chart(document.getElementById('currencyChart'), {
     datasets: [{
       data: currVals,
       backgroundColor: [PURPLE, GREEN, BLUE, ORANGE, TEAL, RED],
-      borderColor: '#0E0E0E', borderWidth: 3, hoverOffset: 6,
+      borderColor: getChartColors().dotBg, borderWidth: 3, hoverOffset: 6,
     }]
   },
   options: {
@@ -424,7 +434,7 @@ const overdueChart = new Chart(document.getElementById('overdueChart'), {
     },
     scales: {
       x: { grid: { display: false } },
-      y: { grid: { color: '#1e1e1e' }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } }
+      y: { grid: { color: getChartColors().grid }, ticks: { callback: v => SYMBOLS[currentCurrency]+v.toLocaleString() } }
     }
   }
 });
@@ -445,7 +455,7 @@ const jobsChart = new Chart(document.getElementById('jobsChart'), {
     plugins: { legend: { display: false } },
     scales: {
       x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
-      y: { grid: { color: '#1e1e1e' }, ticks: { stepSize: 1 } }
+      y: { grid: { color: getChartColors().grid }, ticks: { stepSize: 1 } }
     }
   }
 });
@@ -518,6 +528,25 @@ function setPeriod(p) {
   renderAll();
 }
 
+// Respond to OS light/dark switch
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const cc = getChartColors();
+  Chart.defaults.color  = cc.text;
+  Chart.defaults.borderColor = cc.border;
+  const updateGridColor = ch => {
+    if (!ch || !ch.options || !ch.options.scales) return;
+    Object.values(ch.options.scales).forEach(sc => {
+      if (sc.grid) sc.grid.color = cc.grid;
+    });
+    ch.update();
+  };
+  [revenueChart, clientChart, overdueChart, jobsChart].forEach(updateGridColor);
+  if (currencyChart && currencyChart.data.datasets[0]) {
+    currencyChart.data.datasets[0].borderColor = cc.dotBg;
+    currencyChart.update();
+  }
+});
+
 renderAll();
 </script>
 
@@ -525,7 +554,7 @@ renderAll();
 .an-currency-wrap { display:flex; align-items:center; gap:8px; }
 .an-currency-label { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); font-weight:600; }
 .an-currency-select {
-  background:#1a1a1a; border:1px solid var(--border);
+  background:var(--surface); border:1px solid var(--border);
   color:var(--text); border-radius:6px; padding:6px 10px;
   font-size:13px; font-family:inherit; cursor:pointer;
   outline:none; transition:border-color 0.2s;
@@ -540,12 +569,12 @@ renderAll();
   margin-bottom:24px;
 }
 .an-stat {
-  background:linear-gradient(135deg,#1a1a1a 0%,#111 100%);
+  background:var(--card-bg);
   border:1px solid var(--border);
   border-radius:10px;
   padding:18px 20px;
   display:flex; align-items:center; gap:16px;
-  box-shadow:0 2px 16px rgba(0,0,0,0.25);
+  box-shadow:0 2px 8px rgba(0,0,0,0.12);
   transition:border-color 0.2s;
 }
 .an-stat:hover { border-color:#9046d6; }
@@ -580,7 +609,7 @@ renderAll();
 .an-chart-wrap { position:relative; width:100%; }
 .an-chart-wrap canvas { position:absolute; top:0; left:0; width:100% !important; height:100% !important; }
 
-.an-card { background:#111; border:1px solid var(--border); border-radius:10px; padding:20px 22px; }
+.an-card { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:20px 22px; }
 .an-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .an-card-title { font-size:13px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--text-muted); }
 .an-card-sub { font-size:12px; color:var(--text-dim); }
@@ -590,7 +619,7 @@ renderAll();
 .an-pipeline { display:flex; align-items:center; gap:8px; }
 .an-pipe-step { flex:1; }
 .an-pipe-val { font-size:28px; font-weight:700; margin-bottom:6px; }
-.an-pipe-bar-wrap { background:#1a1a1a; border-radius:4px; height:6px; margin-bottom:6px; overflow:hidden; }
+.an-pipe-bar-wrap { background:var(--border); border-radius:4px; height:6px; margin-bottom:6px; overflow:hidden; }
 .an-pipe-bar { height:6px; border-radius:4px; transition:width 0.6s ease; }
 .an-pipe-label { font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); }
 .an-pipe-arrow { font-size:20px; color:var(--text-dim); margin:0 4px; padding-bottom:14px; }
@@ -603,7 +632,7 @@ renderAll();
   text-decoration:none; color:var(--text); transition:background 0.15s;
   min-width:0; max-width:100%; overflow:hidden;
 }
-.an-feed-item:hover { background:#1a1a1a; text-decoration:none; }
+.an-feed-item:hover { background:var(--surface); text-decoration:none; }
 .an-feed-badge { font-size:10px; font-weight:700; letter-spacing:1px; padding:3px 7px; border-radius:4px; flex-shrink:0; }
 .an-badge-quote   { background:rgba(144,70,214,0.2); color:#9046d6; }
 .an-badge-invoice { background:rgba(231,76,60,0.2);  color:#e74c3c; }
