@@ -16,20 +16,6 @@
 }
 
 
-/* ===== LIGHT MODE OVERRIDES ===== */
-@media (prefers-color-scheme: light) {
-  :root {
-    --black: #f4f4f0;
-    --sidebar-bg: #ffffff;
-    --card-bg: #ffffff;
-    --surface: #ededea;
-    --border: #ddddd8;
-    --text: #1a1a1a;
-    --text-muted: #666666;
-    --text-dim: #999999;
-  }
-}
-
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -1185,6 +1171,45 @@ body[data-theme="light"] ::-webkit-scrollbar-track { background: #f0f0f0; }
 body[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cccccc; }
 body[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #aaaaaa; }
 body[data-theme="light"] .form-control { border-color: #cccccc; }
+
+
+/* ===== ANALYTICS — LIGHT MODE ===== */
+body[data-theme="light"] .an-stat {
+  background: linear-gradient(135deg, #ffffff 0%, #f5f5f5 100%);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+body[data-theme="light"] .an-card {
+  background: #ffffff;
+}
+body[data-theme="light"] .an-currency-select {
+  background: #ffffff;
+  color: #0E0E0E;
+  border-color: #cccccc;
+}
+body[data-theme="light"] .an-pipe-bar-wrap {
+  background: #e0e0e0;
+}
+body[data-theme="light"] .an-feed-item:hover {
+  background: #f5f5f5;
+}
+body[data-theme="light"] .an-card-title {
+  color: #555555;
+}
+body[data-theme="light"] .an-card-sub {
+  color: #888888;
+}
+body[data-theme="light"] .an-pipe-label {
+  color: #888888;
+}
+body[data-theme="light"] .an-stat-label {
+  color: #888888;
+}
+body[data-theme="light"] .an-stat-sub {
+  color: #888888;
+}
+body[data-theme="light"] .an-feed-client {
+  color: #555555;
+}
 
 /* ===== SENT LOG ===== */
 .sent-log-item {

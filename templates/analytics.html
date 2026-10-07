@@ -305,12 +305,12 @@ function renderTiles(totalColl, totalInv, totalCnt, isDefault) {
 
 // ── CHARTS ──
 function getChartColors() {
-  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const light = document.body.getAttribute('data-theme') === 'light';
   return {
-    text:  dark ? '#888'    : '#666',
-    grid:  dark ? '#1e1e1e' : '#e4e4e0',
-    border:dark ? '#2a2a2a' : '#d8d8d4',
-    dotBg: dark ? '#0E0E0E' : '#f4f4f0',
+    text:  light ? '#666'    : '#888',
+    grid:  light ? '#e4e4e0' : '#1e1e1e',
+    border:light ? '#d8d8d4' : '#2a2a2a',
+    dotBg: light ? '#f5f5f5' : '#0E0E0E',
   };
 }
 const _cc = getChartColors();
@@ -529,7 +529,8 @@ function setPeriod(p) {
 }
 
 // Respond to OS light/dark switch
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+// Re-theme charts whenever the toggle flips data-theme
+new MutationObserver(() => {
   const cc = getChartColors();
   Chart.defaults.color  = cc.text;
   Chart.defaults.borderColor = cc.border;
@@ -545,7 +546,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     currencyChart.data.datasets[0].borderColor = cc.dotBg;
     currencyChart.update();
   }
-});
+}).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
 
 renderAll();
 </script>
