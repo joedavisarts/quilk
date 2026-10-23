@@ -124,7 +124,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     # for templates, defaulting to 0 / subtotal for legacy docs.
     doc_ctx = dict(doc)
     if not doc_ctx.get('project_discount'):
-        doc_ctx['project_discount'] = 0
+        doc_ctx['project_discount'] = doc_ctx.get('discount') or 0
     if not doc_ctx.get('project_total'):
         doc_ctx['project_total'] = (doc_ctx.get('subtotal') or 0) - (doc_ctx.get('project_discount') or 0)
 
