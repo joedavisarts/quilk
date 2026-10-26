@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import country_select %}
 {% set type_label = {'invoice': 'Invoice', 'quote': 'Quote', 'receipt': 'Receipt'} %}
 {% block title %}New {{ type_label[doc_type] }} — Quilk{% endblock %}
 {% block content %}
@@ -95,8 +96,18 @@
             <input type="text" name="new_client_city" />
           </div>
           <div class="field">
+            <label>State / Region</label>
+            <input type="text" name="new_client_state_region" />
+          </div>
+        </div>
+        <div class="field-row field-row-stack-mobile">
+          <div class="field">
+            <label>Zip / Postcode</label>
+            <input type="text" name="new_client_zip" />
+          </div>
+          <div class="field">
             <label>Country</label>
-            <input type="text" name="new_client_country" />
+            {{ country_select('new_client_country') }}
           </div>
         </div>
       </div>

@@ -164,11 +164,13 @@ def _normalize_sb_client(row):
         'company_name': row.get('artist_company_name'),
         'email':        row.get('email'),
         'phone':        row.get('phone'),
-        'address':      row.get('address'),
-        'address_line1': row.get('address'),   # compat: put full address in line1
-        'address_line2': None,
-        'city':         None,
-        'country':      None,
+        'address':       row.get('address'),
+        'address_line1': row.get('address_line1'),
+        'address_line2': row.get('address_line2'),
+        'city':          row.get('city'),
+        'state_region':  row.get('state_region'),
+        'zip':           row.get('zip'),
+        'country':       row.get('country'),
         'notes':        row.get('notes'),
         'discarded':    row.get('discarded', False),
         'discarded_at': row.get('discarded_at'),
@@ -754,13 +756,6 @@ def new_document(doc_type):
         new_company = data.get('new_client_company_name', '').strip()
         if new_name or new_company:
             new_client_uuid = str(uuid.uuid4())
-            addr_parts = [
-                (data.get('new_client_addr1') or '').strip(),
-                (data.get('new_client_addr2') or '').strip(),
-                (data.get('new_client_city') or '').strip(),
-                (data.get('new_client_country') or '').strip(),
-            ]
-            _addr = ', '.join(p for p in addr_parts if p) or None
             sb.table('clients').insert({
                 'id': new_client_uuid,
                 'quilk_user_id': current_user.id,
@@ -768,7 +763,12 @@ def new_document(doc_type):
                 'artist_company_name': new_company or None,
                 'email': data.get('new_client_email') or None,
                 'phone': data.get('new_client_phone') or None,
-                'address': _addr,
+                'address_line1': (data.get('new_client_addr1') or '').strip() or None,
+                'address_line2': (data.get('new_client_addr2') or '').strip() or None,
+                'city': (data.get('new_client_city') or '').strip() or None,
+                'state_region': (data.get('new_client_state_region') or '').strip() or None,
+                'zip': (data.get('new_client_zip') or '').strip() or None,
+                'country': (data.get('new_client_country') or '').strip() or None,
                 'notes': data.get('new_client_notes') or None,
             }).execute()
             client_uuid = new_client_uuid
@@ -985,9 +985,6 @@ def clients():
         name = (d.get('name') or '').strip() or None
         if not company and not name:
             return redirect(url_for('clients'))
-        addr_parts = [(d.get('address_line1') or '').strip(), (d.get('address_line2') or '').strip(),
-                      (d.get('city') or '').strip(), (d.get('country') or '').strip()]
-        _addr = ', '.join(p for p in addr_parts if p) or None
         sb.table('clients').insert({
             'id': str(uuid.uuid4()),
             'quilk_user_id': current_user.id,
@@ -995,7 +992,12 @@ def clients():
             'artist_company_name': company,
             'email': d.get('email') or None,
             'phone': d.get('phone') or None,
-            'address': _addr,
+            'address_line1': (d.get('address_line1') or '').strip() or None,
+            'address_line2': (d.get('address_line2') or '').strip() or None,
+            'city': (d.get('city') or '').strip() or None,
+            'state_region': (d.get('state_region') or '').strip() or None,
+            'zip': (d.get('zip') or '').strip() or None,
+            'country': (d.get('country') or '').strip() or None,
             'notes': d.get('notes') or None,
         }).execute()
         return redirect(url_for('clients'))
@@ -1036,9 +1038,6 @@ def import_clients():
             if not company and not name:
                 skipped += 1
                 continue
-            addr_parts = [(row.get('address_line1') or '').strip(), (row.get('address_line2') or '').strip(),
-                          (row.get('city') or '').strip(), (row.get('country') or '').strip()]
-            _addr = ', '.join(p for p in addr_parts if p) or None
             sb.table('clients').insert({
                 'id': str(uuid.uuid4()),
                 'quilk_user_id': current_user.id,
@@ -1046,7 +1045,12 @@ def import_clients():
                 'artist_company_name': company,
                 'email': (row.get('email') or '').strip() or None,
                 'phone': (row.get('phone') or '').strip() or None,
-                'address': _addr,
+                'address_line1': (row.get('address_line1') or '').strip() or None,
+                'address_line2': (row.get('address_line2') or '').strip() or None,
+                'city': (row.get('city') or '').strip() or None,
+                'state_region': (row.get('state_region') or '').strip() or None,
+                'zip': (row.get('zip') or '').strip() or None,
+                'country': (row.get('country') or '').strip() or None,
                 'notes': (row.get('notes') or '').strip() or None,
             }).execute()
             imported += 1
@@ -1087,19 +1091,17 @@ def client_edit(client_id):
 
     if request.method == 'POST':
         d = request.form
-        addr_parts = [
-            (d.get('address_line1') or '').strip(),
-            (d.get('address_line2') or '').strip(),
-            (d.get('city') or '').strip(),
-            (d.get('country') or '').strip(),
-        ]
-        _addr = ', '.join(p for p in addr_parts if p) or None
         sb.table('clients').update({
             'client_name': d.get('name') or '',
             'artist_company_name': d.get('company_name') or None,
             'email': d.get('email') or None,
             'phone': d.get('phone') or None,
-            'address': _addr,
+            'address_line1': (d.get('address_line1') or '').strip() or None,
+            'address_line2': (d.get('address_line2') or '').strip() or None,
+            'city': (d.get('city') or '').strip() or None,
+            'state_region': (d.get('state_region') or '').strip() or None,
+            'zip': (d.get('zip') or '').strip() or None,
+            'country': (d.get('country') or '').strip() or None,
             'notes': d.get('notes') or None,
         }).eq('id', client_id).eq('quilk_user_id', current_user.id).execute()
         return redirect(url_for('client_detail', client_id=client_id))
@@ -2290,7 +2292,7 @@ def export_selection_clients_csv():
     result = sb.table('clients').select('*').in_('id', client_ids).eq('quilk_user_id', current_user.id).execute()
     rows = [_normalize_sb_client(r) for r in (result.data or [])]
     fields = ['company_name', 'name', 'email', 'phone',
-              'address_line1', 'address_line2', 'city', 'country', 'notes']
+              'address_line1', 'address_line2', 'city', 'state_region', 'zip', 'country', 'notes']
     output = io.StringIO()
     w = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
     w.writeheader()

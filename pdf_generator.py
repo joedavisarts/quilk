@@ -13,6 +13,35 @@ TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates', 'pdf')
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'static', 'assets')
 
 
+
+# US state full name → 2-letter abbreviation for PDF display
+_US_STATE_ABBR = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+    'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+    'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+    'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+    'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+    'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+    'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+    'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+    'Wisconsin': 'WI', 'Wyoming': 'WY',
+    'District of Columbia': 'DC', 'Puerto Rico': 'PR', 'Guam': 'GU',
+    'U.S. Virgin Islands': 'VI', 'American Samoa': 'AS',
+    'Northern Mariana Islands': 'MP',
+}
+
+
+def _abbr_state_for_pdf(client: dict) -> str:
+    """Return abbreviated state/region for PDF: 2-letter for US states, full name otherwise."""
+    state = client.get('state_region') or ''
+    if client.get('country') == 'United States':
+        return _US_STATE_ABBR.get(state, state)
+    return state
+
 def _logo_b64_for_file(filename: str) -> str:
     if not filename:
         return ''
@@ -128,6 +157,10 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     if not doc_ctx.get('project_total'):
         doc_ctx['project_total'] = (doc_ctx.get('subtotal') or 0) - (doc_ctx.get('project_discount') or 0)
 
+    # Build client context: apply US state abbreviation for PDF display
+    client_ctx = dict(client)
+    client_ctx['state_region'] = _abbr_state_for_pdf(client)
+
     if user.get('username') == 'aureum':
         env.filters['bank_rows'] = _bank_rows
         template = env.get_template('aureum_doc.html')
@@ -151,7 +184,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
             doc_title = doc_type.upper()
         html_str = template.render(
             doc=doc_ctx,
-            client=client,
+            client=client_ctx,
             user=user_ctx,
             doc_title=doc_title,
             aureum_logo_b64=_logo_b64_for_file('aureum_luxe_logo.png'),
@@ -161,7 +194,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
         template = env.get_template(f'{doc_type}.html')
         html_str = template.render(
             doc=doc_ctx,
-            client=client,
+            client=client_ctx,
             logo_b64=_logo_b64_for_file(user.get('logo_filename')),
             logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
             user=user_ctx,

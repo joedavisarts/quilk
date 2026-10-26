@@ -71,8 +71,9 @@ table.items td { padding: 13px 14px; border-bottom: 0.5px solid #eee; }
         {% if client.phone %}<div class="muted">{{ client.phone }}</div>{% endif %}
         {% if client.address_line1 %}<div class="muted">{{ client.address_line1 }}</div>{% endif %}
         {% if client.address_line2 %}<div class="muted">{{ client.address_line2 }}</div>{% endif %}
-        {% if client.city or client.country %}
-          <div class="muted">{{ client.city or '' }}{% if client.city and client.country %}, {% endif %}{{ client.country or '' }}</div>
+        {% if client.city or client.state_region or client.zip %}
+          <div class="muted">{% if client.city %}{{ client.city }}{% endif %}{% if client.state_region %}, {{ client.state_region }}{% endif %}{% if client.zip %} {{ client.zip }}{% endif %}</div>{% endif %}
+        {% if client.country %}<div class="muted">{{ client.country }}</div>{% endif %}
         {% endif %}
       </div>
       <div class="metaright">

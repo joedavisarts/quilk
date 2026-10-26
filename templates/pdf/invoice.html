@@ -35,9 +35,10 @@
       {% if client.phone %}<p>{{ client.phone }}</p>{% endif %}
       {% if client.address_line1 %}<p>{{ client.address_line1 }}</p>{% endif %}
       {% if client.address_line2 %}<p>{{ client.address_line2 }}</p>{% endif %}
-      {% if client.city or client.country %}
-        <p>{% if client.city %}{{ client.city }}{% endif %}{% if client.country %}, {{ client.country }}{% endif %}</p>
+      {% if client.city or client.state_region or client.zip %}
+        <p>{% if client.city %}{{ client.city }}{% endif %}{% if client.state_region %}, {{ client.state_region }}{% endif %}{% if client.zip %} {{ client.zip }}{% endif %}</p>
       {% endif %}
+      {% if client.country %}<p>{{ client.country }}</p>{% endif %}
     </div>
     <div class="doc-meta">
       <div><strong>Date Issued:</strong> {{ doc.date_issued }}</div>
