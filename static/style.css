@@ -612,9 +612,12 @@ input[type="checkbox"]:indeterminate {
   color: var(--text-muted);
   margin-bottom: 5px;
 }
+.field { min-width: 0; }
 .field input,
 .field select,
 .field textarea {
+  width: 100%;
+  box-sizing: border-box;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 5px;
