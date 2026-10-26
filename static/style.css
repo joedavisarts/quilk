@@ -231,6 +231,11 @@ a:hover { text-decoration: underline; }
   opacity: 1;
   box-shadow: 0 4px 14px rgba(144,70,214,0.45);
 }
+.btn:disabled, .btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .btn-outline {
   background: transparent;
   color: var(--text-muted);

@@ -351,7 +351,9 @@ const DOC_TYPE = "{{ doc_type }}";
         row.addEventListener('mousedown', e => {
           e.preventDefault();
           addClient(c.id, labelMap[c.id]);
+          _lightboxJustClosed = true;
           closeLightbox();
+          requestAnimationFrame(() => { _lightboxJustClosed = false; });
         });
       }
       clBody.appendChild(row);
@@ -369,7 +371,11 @@ const DOC_TYPE = "{{ doc_type }}";
     lightbox.classList.add('hidden');
   }
 
-  document.getElementById('add-client-pill-btn').addEventListener('click', e => { e.stopPropagation(); openLightbox(); });
+  let _lightboxJustClosed = false;
+  document.getElementById('add-client-pill-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!_lightboxJustClosed) openLightbox();
+  });
   document.getElementById('cl-close-btn').addEventListener('click', closeLightbox);
   document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);
   lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });

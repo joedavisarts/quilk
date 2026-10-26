@@ -34,7 +34,7 @@
       <!-- PDF addressed-to multi-select (shown when 2+ doc clients) -->
       <div class="field" id="pdf-client-field" style="display:none;">
         <label>Client(s) displayed on PDF</label>
-        <div id="pdf-client-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+        <div id="pdf-client-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;overflow:visible;"></div>
         <div id="pdf-no-client-warning" class="flash flash-error" style="display:none;margin-top:8px;">
           PDF needs at least one client addressed to — please select at least one above.
         </div>
@@ -142,9 +142,9 @@ function insertToken(token) {
     pdfCBs.innerHTML = '';
     DOC_CLIENTS.forEach((c, i) => {
       const wrap = document.createElement('label');
-      wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;width:100%;min-width:0;';
+      wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;width:100%;';
       const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.name = 'pdf_client_ids'; cb.value = c.id; cb.checked = (i === 0);
+      cb.type = 'checkbox'; cb.name = 'pdf_client_ids'; cb.value = c.id; cb.checked = (i === 0); cb.style.cssText = 'width:16px;height:16px;flex-shrink:0;';
       cb.addEventListener('change', () => {
         const chk = pdfCBs.querySelectorAll('input:checked');
         noClientWarn.style.display = chk.length === 0 ? '' : 'none';
@@ -152,7 +152,10 @@ function insertToken(token) {
         syncSend();
       });
       wrap.appendChild(cb);
-      wrap.appendChild(document.createTextNode(' ' + (c.display_name || c.name || c.company_name || c.id.slice(0,8))));
+      const lbl = document.createElement('span');
+      lbl.style.cssText = 'overflow:visible;white-space:normal;flex:1;';
+      lbl.textContent = c.display_name || c.name || c.company_name || c.id.slice(0,8);
+      wrap.appendChild(lbl);
       pdfCBs.appendChild(wrap);
     });
     const dismissBtn = document.getElementById('dismiss-multi-warn');
