@@ -1826,7 +1826,7 @@ def generate_invoice(doc_id):
 
     # Load job docs for gating checks
     job_docs = _rows_to_list(db.execute(
-        "SELECT id, doc_type, status, voided, invoice_type, amount_due"
+        "SELECT id, doc_type, status, voided, invoice_type, amount_due, paid_amount"
         " FROM documents WHERE job_id=? AND user_id=?",
         (job_id, current_user.id),
     ).fetchall())
@@ -1873,7 +1873,7 @@ def generate_invoice(doc_id):
             if d['doc_type'] == 'invoice' and not d.get('voided')
             and d.get('invoice_type') == 'deposit' and d['status'] == 'paid'
         ]
-        already_invoiced = sum(d['amount_due'] or 0 for d in paid_deposits)
+        already_invoiced = sum((d['paid_amount'] or d['amount_due'] or 0) for d in paid_deposits)
         amount_due = project_total - already_invoiced
 
     pay_by_date = request.form.get('pay_by_date') or None
