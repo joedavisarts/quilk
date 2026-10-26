@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; }
+body { margin: 0; background: #060606; color: #F0F0F0; }
+
+.paper {
+  width: 210mm;
+  min-height: 297mm;
+  background: #0D0D0D;
+  padding: 36px 48px 32px;
+}
+
+/* Header */
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-top: 28px;
+  margin-bottom: 18px;
+}
+.logo-block img { height: 34px; width: auto; display: block; }
+.logo-placeholder { font-size: 22px; font-weight: 900; letter-spacing: 4px; color: #F0F0F0; }
+.header-right { text-align: right; font-size: 9pt; line-height: 1.75; color: #999; }
+.doc-type-label {
+  font-size: 26pt; font-weight: 900; letter-spacing: 3px;
+  color: #DAB322; line-height: 1; margin-bottom: 5px; text-transform: uppercase;
+}
+.doc-number { font-size: 11pt; font-weight: 700; color: #F0F0F0; margin-bottom: 7px; }
+
+/* Gold rule */
+.gold-rule { border: none; border-top: 2px solid #DAB322; margin: 0 0 22px; }
+
+/* Bill-to section */
+.bill-to-section { display: flex; justify-content: space-between; margin-bottom: 26px; }
+.bill-to h3 {
+  font-size: 7.5pt; letter-spacing: 2px; font-weight: 700;
+  color: #F0F0F0; margin: 0 0 8px; text-transform: uppercase;
+}
+.bill-to p { margin: 2px 0; font-size: 9.5pt; color: #B8B8B8; }
+.bill-to p strong { color: #F0F0F0; font-size: 10.5pt; }
+.doc-meta { text-align: right; font-size: 9.5pt; line-height: 1.9; color: #B8B8B8; }
+.doc-meta strong { color: #F0F0F0; }
+
+/* Items table */
+.items-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 18px; }
+.items-table thead tr { background: #1A1A1A; }
+.items-table th {
+  font-size: 7.5pt; letter-spacing: 1.5px; font-weight: 700;
+  color: #F0F0F0; padding: 10px 12px; text-align: left; text-transform: uppercase;
+}
+.items-table th.r, .items-table td.r { text-align: right; }
+.items-table th.c, .items-table td.c { text-align: center; }
+.items-table td { padding: 10px 12px; border-bottom: 1px solid #1E1E1E; color: #B8B8B8; }
+.items-table td:first-child { color: #F0F0F0; }
+
+/* Totals */
+.totals-block { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+.totals-inner { min-width: 280px; font-size: 9.5pt; }
+.t-row {
+  display: flex; justify-content: space-between;
+  padding: 4px 0; border-bottom: 1px solid #1E1E1E; color: #B8B8B8;
+}
+.t-due {
+  font-weight: 700; font-size: 12.5pt; color: #F0F0F0;
+  border-bottom: none; padding-top: 10px; border-top: 1px solid #333;
+}
+
+/* Pay-by callout */
+.pay-by { font-size: 9.5pt; color: #B8B8B8; margin-bottom: 14px; }
+.pay-by-date { color: #F0F0F0; font-weight: 700; }
+
+/* Next-page notice */
+.next-page-notice { font-size: 13pt; font-weight: 700; color: #DAB322; margin-top: 16px; margin-bottom: 22px; }
+
+/* Footer */
+.doc-footer {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  border-top: 1px solid #1E1E1E; padding-top: 12px;
+  font-size: 8.5pt; color: #666; margin-top: 20px;
+}
+.thank-you { color: #F0F0F0; font-weight: 600; font-size: 9.5pt; }
+
+/* Payment page */
+.payment-section h3 {
+  font-size: 16pt; font-weight: 900; letter-spacing: 2px;
+  color: #F0F0F0; margin: 0 0 10px; text-transform: uppercase;
+}
+.payment-group-label {
+  font-size: 7.5pt; letter-spacing: 2.5px; font-weight: 700;
+  color: #F0F0F0; text-transform: uppercase; margin: 20px 0 6px;
+}
+.payment-group-rule { border: none; border-top: 1px solid #242424; margin: 0 0 14px; }
+.payment-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 14px; }
+.payment-item { flex: 1 1 180px; min-width: 150px; }
+.payment-item h4 {
+  font-size: 9pt; font-weight: 700; color: #F0F0F0;
+  margin: 0 0 6px; display: flex; align-items: center; gap: 4px;
+}
+.payment-item p { font-size: 8.5pt; color: #A8A8A8; margin: 0; line-height: 1.75; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="paper">
+
+  <div class="doc-header">
+    <div class="logo-block">
+      {% if logo_b64 %}
+        <img src="{{ logo_b64 }}" alt="{{ user.business_name }}" />
+      {% else %}
+        <div class="logo-placeholder">CCS</div>
+      {% endif %}
+    </div>
+    <div class="header-right">
+      <div class="doc-type-label">
+        {% if doc.doc_type == 'invoice' %}
+          {% if doc.invoice_type == 'deposit' %}Deposit Invoice
+          {% elif doc.invoice_type == 'balance' %}Balance Invoice
+          {% else %}Invoice{% endif %}
+        {% elif doc.doc_type == 'quote' %}Quote
+        {% elif doc.doc_type == 'receipt' %}Receipt
+        {% endif %}
+      </div>
+      <div class="doc-number">{{ doc.doc_number }}</div>
+      {% if user.address_line1 %}<div>{{ user.address_line1 }}</div>{% endif %}
+      {% if user.address_line2 %}<div>{{ user.address_line2 }}</div>{% endif %}
+      {% if user.address_country %}<div>{{ user.address_country }}</div>{% endif %}
+      {% if user.business_email %}<div>{{ user.business_email }}</div>{% endif %}
+      {% for link in user.social_links %}{% if loop.first %}<div>{{ link.url }}</div>{% endif %}{% endfor %}
+    </div>
+  </div>
+
+  <hr class="gold-rule" />
+
+  <div class="bill-to-section">
+    <div class="bill-to">
+      <h3>Bill To</h3>
+      {% set bill_clients = clients if clients else ([client] if client else []) %}
+      {% for bc in bill_clients %}
+      {% if not loop.first %}<hr style="border:none;border-top:1px solid #1E1E1E;margin:6px 0;">{% endif %}
+      {% if bc.company_name %}<p><strong>{{ bc.company_name }}</strong></p><p>{{ bc.name or '' }}</p>
+      {% else %}<p><strong>{{ bc.name or '' }}</strong></p>{% endif %}
+      {% if bc.email %}<p>{{ bc.email }}</p>{% endif %}
+      {% if bc.phone %}<p>{{ bc.phone }}</p>{% endif %}
+      {% if bc.address_line1 %}<p>{{ bc.address_line1 }}</p>{% endif %}
+      {% if bc.address_line2 %}<p>{{ bc.address_line2 }}</p>{% endif %}
+      {% if bc.city or bc.state_region or bc.zip %}
+        <p>{% if bc.city %}{{ bc.city }}{% endif %}{% if bc.state_region %}, {{ bc.state_region }}{% endif %}{% if bc.zip %} {{ bc.zip }}{% endif %}</p>
+      {% endif %}
+      {% if bc.country %}<p>{{ bc.country }}</p>{% endif %}
+      {% endfor %}
+    </div>
+    <div class="doc-meta">
+      <div><strong>Date Issued:</strong> {{ doc.date_issued }}</div>
+      {% if doc.pay_by_date %}<div><strong>Due Date:</strong> {{ doc.pay_by_date | format_date }}</div>{% endif %}
+      <div><strong>Currency:</strong> {{ doc.currency }}</div>
+    </div>
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="c">Qty</th>
+        <th class="r">Unit Price</th>
+        <th class="r">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in doc.line_items %}
+      <tr>
+        <td>{{ item.description }}</td>
+        <td class="c">{{ item.qty }}</td>
+        <td class="r">{{ item.unit_price | format_currency }}</td>
+        <td class="r">{{ (item.qty * item.unit_price) | format_currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-block">
+    <div class="totals-inner">
+      <div class="t-row"><span>Subtotal</span><span>{{ doc.currency }} {{ doc.subtotal | format_currency }}</span></div>
+      {% if doc.project_discount and doc.project_discount > 0 %}
+      <div class="t-row"><span>Discount</span><span>{{ doc.currency }} {{ doc.project_discount | format_currency }}</span></div>
+      {% endif %}
+      {% if doc.invoice_type in ('deposit', 'balance') %}
+      <div class="t-row"><span>Project Total</span><span>{{ doc.currency }} {{ doc.project_total | format_currency }}</span></div>
+      <div class="t-row t-due">
+        <span>{% if doc.invoice_type == 'deposit' %}Deposit Due{% else %}Balance Due{% endif %}</span>
+        <span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span>
+      </div>
+      {% elif doc.doc_type == 'invoice' %}
+      <div class="t-row"><span>Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
+      <div class="t-row t-due"><span>Amount Due</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+      {% elif doc.doc_type == 'receipt' %}
+      <div class="t-row t-due"><span>Amount Paid</span><span>{{ doc.currency }} {{ doc.paid_amount | format_currency }}</span></div>
+      {% else %}
+      <div class="t-row t-due"><span>Total</span><span>{{ doc.currency }} {{ doc.amount_due | format_currency }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if doc.pay_by_date %}
+  <div class="pay-by">
+    <strong>Payment due by:</strong> <span class="pay-by-date">{{ doc.pay_by_date | format_date }}</span>
+  </div>
+  {% endif %}
+
+  {% if doc.notes %}
+  <p style="font-size:8.5pt;color:#888;margin-bottom:14pt;"><em>{{ doc.notes }}</em></p>
+  {% endif %}
+
+  {% if user.payment_methods %}
+  <div class="next-page-notice">Payment details on the following page.</div>
+  {% endif %}
+
+  <div class="doc-footer">
+    <div>
+      {% if user.business_email %}<div>{{ user.business_email }}</div>{% endif %}
+      <div style="margin-top:2pt;font-size:7pt;color:#444;">Generated by Quilk &middot; {{ user.business_name }}</div>
+    </div>
+    <div class="thank-you">Thank you for your business.</div>
+  </div>
+
+</div>
+
+{% if user.payment_methods %}
+<!-- PAGE 2: Methods of Payment -->
+<div style="page-break-before: always;"></div>
+<div class="paper">
+
+  <div class="doc-header" style="padding-top:28px;">
+    <div class="logo-block">
+      {% if logo_b64 %}
+        <img src="{{ logo_b64 }}" alt="{{ user.business_name }}" />
+      {% else %}
+        <div class="logo-placeholder">CCS</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <hr class="gold-rule" />
+
+  <div class="payment-section">
+    <h3>Methods of Payment</h3>
+
+    {% for group in user.payment_methods %}
+    <div class="payment-group-label">{{ group.group }}</div>
+    <hr class="payment-group-rule" />
+    <div class="payment-grid">
+      {% for item in group['items'] %}
+      <div class="payment-item">
+        <h4>
+          {% if flag_svgs and item.label in flag_svgs %}
+            {% for svg in flag_svgs[item.label] %}<span style="margin-right:3px;display:inline-block;">{{ svg }}</span>{% endfor %}
+          {% endif %}
+          {{ item.label }}
+        </h4>
+        <p>{{ item.details | nl2br | safe }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="doc-footer" style="margin-top:30px;">
+    <div>
+      {% if user.business_email %}<div>{{ user.business_email }}</div>{% endif %}
+      <div style="margin-top:2pt;font-size:7pt;color:#444;">Generated by Quilk &middot; {{ user.business_name }}</div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
+</body>
+</html>

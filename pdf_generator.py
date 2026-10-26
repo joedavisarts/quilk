@@ -90,6 +90,7 @@ _SVG_FLAGS = {
     'jm': '<svg width="16" height="11" viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="56" fill="#000000"/><polygon points="0,0 80,0 40,28" fill="#009B3A"/><polygon points="0,56 80,56 40,28" fill="#009B3A"/><line x1="0" y1="0" x2="80" y2="56" stroke="#FED100" stroke-width="10"/><line x1="80" y1="0" x2="0" y2="56" stroke="#FED100" stroke-width="10"/><rect x="0" y="0" width="80" height="56" fill="none" stroke="#cccccc" stroke-width="0.5"/></svg>',
     'uk': '<svg width="16" height="11" viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="56" fill="#00247D"/><line x1="0" y1="0" x2="80" y2="56" stroke="#FFFFFF" stroke-width="12"/><line x1="80" y1="0" x2="0" y2="56" stroke="#FFFFFF" stroke-width="12"/><line x1="0" y1="0" x2="80" y2="56" stroke="#CF142B" stroke-width="5"/><line x1="80" y1="0" x2="0" y2="56" stroke="#CF142B" stroke-width="5"/><rect x="0" y="20" width="80" height="16" fill="#FFFFFF"/><rect x="30" y="0" width="20" height="56" fill="#FFFFFF"/><rect x="0" y="22" width="80" height="12" fill="#CF142B"/><rect x="32" y="0" width="16" height="56" fill="#CF142B"/><rect x="0" y="0" width="80" height="56" fill="none" stroke="#cccccc" stroke-width="0.5"/></svg>',
     'us': '<svg width="16" height="11" viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="56" fill="#FFFFFF"/><rect x="0" y="2" width="80" height="7" fill="#B22234"/><rect x="0" y="16" width="80" height="7" fill="#B22234"/><rect x="0" y="30" width="80" height="7" fill="#B22234"/><rect x="0" y="44" width="80" height="7" fill="#B22234"/><rect x="0" y="0" width="32" height="30" fill="#3C3B6E"/><circle cx="6" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="14" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="22" cy="5" r="1.8" fill="#FFFFFF"/><circle cx="10" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="18" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="26" cy="11" r="1.8" fill="#FFFFFF"/><circle cx="6" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="14" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="22" cy="17" r="1.8" fill="#FFFFFF"/><circle cx="10" cy="23" r="1.8" fill="#FFFFFF"/><circle cx="18" cy="23" r="1.8" fill="#FFFFFF"/><circle cx="26" cy="23" r="1.8" fill="#FFFFFF"/><rect x="0" y="0" width="80" height="56" fill="none" stroke="#cccccc" stroke-width="0.5"/></svg>',
+    'globe': '<svg width="16" height="11" viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg"><circle cx="40" cy="28" r="25" fill="#1565C0"/><ellipse cx="40" cy="28" rx="13" ry="25" fill="none" stroke="#90CAF9" stroke-width="3"/><line x1="15" y1="28" x2="65" y2="28" stroke="#90CAF9" stroke-width="3"/><ellipse cx="40" cy="28" rx="25" ry="10" fill="none" stroke="#90CAF9" stroke-width="3"/><rect x="0" y="0" width="80" height="56" fill="none" stroke="#cccccc" stroke-width="0.5"/></svg>',
 }
 
 _GROUP_FLAGS = {
@@ -99,6 +100,10 @@ _GROUP_FLAGS = {
     'Venmo (America)':                  ['us'],
     'PayPal (Worldwide)':               ['jm', 'uk', 'us'],
     'Bank Transfer (Worldwide, US Bank)': ['jm', 'uk', 'us'],
+    'Bank Transfer (US)':                 ['us'],
+    'PayPal':                             ['globe'],
+    'Venmo':                              ['globe'],
+    'Cash App':                           ['globe'],
 }
 
 
@@ -207,6 +212,16 @@ def generate_pdf(doc: dict, client, user: dict) -> bytes:
             doc_title=doc_title,
             aureum_logo_b64=_logo_b64_for_file('aureum_luxe_logo.png'),
             vsm_logo_b64=_logo_b64_for_file('VSMLogoWhite.png'),
+        )
+    elif user.get('username') == 'chromatics':
+        template = env.get_template('chromatics_doc.html')
+        html_str = template.render(
+            doc=doc_ctx,
+            client=client_ctx,
+            clients=clients_ctx,
+            logo_b64=_logo_b64_for_file(user.get('logo_filename')),
+            user=user_ctx,
+            flag_svgs=_build_flag_svgs(payment_methods),
         )
     else:
         template = env.get_template(f'{doc_type}.html')

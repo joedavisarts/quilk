@@ -127,6 +127,77 @@ VERLANDO_PAYMENT_METHODS = json.dumps([
 ])
 
 
+CHROMATICS_PASSWORD = 'chr0m@t!c5'  # hashed immediately below; plain text only here
+
+CHROMATICS_SOCIAL_LINKS = json.dumps([
+    {'label': 'Instagram', 'url': 'https://www.instagram.com/chromaticscreativestudios'},
+    {'label': 'YouTube',   'url': 'https://www.youtube.com/@chromaticscreativestudios'},
+    {'label': 'TikTok',    'url': 'https://www.tiktok.com/@chromaticscreativestudios'},
+])
+
+CHROMATICS_PAYMENT_METHODS = json.dumps([
+    {
+        'group': 'Preferred',
+        'items': [
+            {
+                'label': 'Bank Transfer (Jamaica)',
+                'details': (
+                    'Joseph Lucas Fonsil Davis\n'
+                    'Bank of Nova Scotia (Scotiabank)\n'
+                    'Branch/Transit: 90365\n'
+                    'Account Type: Savings\n'
+                    'Account Number: 90365 000853610\n'
+                    'Currency: Jamaican Dollars'
+                ),
+            },
+            {
+                'label': 'Bank Transfer (England)',
+                'details': (
+                    'Joseph Davis\n'
+                    'Sort Code: 30-91-83\n'
+                    'Account Number: 52642068\n'
+                    'IBAN: GB55LOYD30918352642068\n'
+                    'BIC/SWIFT: LOYDGB21236'
+                ),
+            },
+            {
+                'label': 'Zelle (United States)',
+                'details': 'josephdavismusic@gmail.com',
+            },
+        ],
+    },
+    {
+        'group': 'Alternative',
+        'items': [
+            {
+                'label': 'Bank Transfer (US)',
+                'details': (
+                    'Joseph Lucas Fonsil Davis\n'
+                    'Community Federal Savings Bank\n'
+                    'Account Number: 822001057565\n'
+                    'ACH and Wire Routing: 026073150\n'
+                    'Account Type: Checking\n'
+                    'Swift/BIC: CMFGUS33\n'
+                    '89-16 Jamaica Avenue, Woodhaven, NY 11421, United States'
+                ),
+            },
+            {
+                'label': 'PayPal',
+                'details': 'paypal.me/joedavisartsnew',
+            },
+            {
+                'label': 'Venmo',
+                'details': '@joedavismusic',
+            },
+            {
+                'label': 'Cash App',
+                'details': '$joedavismusic',
+            },
+        ],
+    },
+])
+
+
 def migrate():
     db = get_db()
     c = db.cursor()
@@ -266,6 +337,50 @@ def migrate():
         print('- aureum already exists, skipping insert')
 
     # ------------------------------------------------------------------
+    # 3b. Insert Chromatics (skip if already present)
+    # ------------------------------------------------------------------
+    if not c.execute("SELECT id FROM users WHERE username='chromatics'").fetchone():
+        c.execute(
+            """INSERT INTO users (
+                username, password_hash, email, display_name, title,
+                business_name, business_website, business_email, business_phone,
+                address_line1, address_line2, address_country,
+                accent_color, accent_color_dark,
+                logo_filename, logotype_filename,
+                doc_prefix_invoice, doc_prefix_quote, doc_prefix_receipt,
+                social_links_json, payment_methods_json, gmail_token
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                'chromatics',
+                generate_password_hash(CHROMATICS_PASSWORD),
+                'josephdavismusic@gmail.com',
+                'Joe Davis',
+                'Music Producer & Composer',
+                'Chromatics Creative Studios',
+                '',
+                'josephdavismusic@gmail.com',
+                None,  # no phone on Chromatics docs
+                '16 Liguanea Way',
+                'Liguanea, Kingston',
+                'Jamaica, W.I.',
+                '#DAB322',
+                '#77600B',
+                'chromatics_logo.png',
+                None,
+                'CCSI',
+                'CCSQ',
+                'CCSR',
+                CHROMATICS_SOCIAL_LINKS,
+                CHROMATICS_PAYMENT_METHODS,
+                None,  # Gmail auth handled separately
+            ),
+        )
+        db.commit()
+        print('✓ Inserted user: chromatics')
+    else:
+        print('- chromatics already exists, skipping insert')
+
+    # ------------------------------------------------------------------
     # 4. Add user_id columns to clients / documents / item_library
     # ------------------------------------------------------------------
     def _add_col(table, col, definition):
@@ -375,6 +490,29 @@ def migrate():
         )
     db.commit()
     print('✓ doc_counter seeded for joe')
+
+    # ------------------------------------------------------------------
+    # 9. Seed / enforce doc_counter starting point for Chromatics
+    # ------------------------------------------------------------------
+    chromatics_row = c.execute("SELECT id FROM users WHERE username='chromatics'").fetchone()
+    if chromatics_row:
+        chromatics_id = chromatics_row['id']
+        CHROMATICS_COUNTER_SEED = {'invoice': 1110, 'quote': 1110, 'receipt': 1110}
+        for doc_type, seed_val in CHROMATICS_COUNTER_SEED.items():
+            c.execute(
+                "INSERT OR IGNORE INTO doc_counter (doc_type, user_id, last_number) "
+                "VALUES (?, ?, ?)",
+                (doc_type, chromatics_id, seed_val),
+            )
+            c.execute(
+                "UPDATE doc_counter SET last_number=? "
+                "WHERE doc_type=? AND user_id=? AND last_number < ?",
+                (seed_val, doc_type, chromatics_id, seed_val),
+            )
+        db.commit()
+        print('✓ doc_counter seeded for chromatics (starts at 1111)')
+    else:
+        print('! chromatics user not found — skipping doc_counter seed')
 
     db.close()
     print('\nMigration complete.')
