@@ -131,7 +131,7 @@ body { margin: 0; background: #060606; color: #F0F0F0; }
       {% if user.address_line2 %}<div>{{ user.address_line2 }}</div>{% endif %}
       {% if user.address_country %}<div>{{ user.address_country }}</div>{% endif %}
       {% if user.business_email %}<div>{{ user.business_email }}</div>{% endif %}
-      {% for link in user.social_links %}{% if loop.first %}<div>{{ link.url }}</div>{% endif %}{% endfor %}
+
     </div>
   </div>
 
