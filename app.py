@@ -1868,6 +1868,16 @@ def generate_invoice(doc_id):
          project_discount, project_total),
     )
     invoice_id = cur.lastrowid
+    # Copy all multi-client junction rows from the source document
+    src_clients = db.execute(
+        'SELECT client_uuid, display_order FROM document_clients WHERE doc_id=? ORDER BY display_order',
+        (doc_id,),
+    ).fetchall()
+    for row in src_clients:
+        db.execute(
+            'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
+            (invoice_id, row[0], row[1]),
+        )
     db.commit()
     _sync_gig_financials(db, job_id, current_user.id)
     db.close()
@@ -1908,6 +1918,16 @@ def generate_receipt_from_invoice(doc_id):
          invoice.get('project_discount') or 0, invoice.get('project_total') or 0),
     )
     receipt_id = cur.lastrowid
+    # Copy all multi-client junction rows from the source invoice
+    src_clients_r = db.execute(
+        'SELECT client_uuid, display_order FROM document_clients WHERE doc_id=? ORDER BY display_order',
+        (doc_id,),
+    ).fetchall()
+    for row in src_clients_r:
+        db.execute(
+            'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
+            (receipt_id, row[0], row[1]),
+        )
     # Update parent invoice: reflect full payment
     db.execute(
         "UPDATE documents SET paid_amount=?, amount_due=0 WHERE id=? AND user_id=?",
