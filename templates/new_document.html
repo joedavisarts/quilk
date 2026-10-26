@@ -316,8 +316,8 @@ const DOC_TYPE = "{{ doc_type }}";
     syncHiddenInputs();
     renderPills();
     syncSaveBtn();
-    // Load templates for first client
-    if (selectedIds.length === 1) loadTemplates(id);
+    // Load templates for first client (guard: function may not be defined)
+    if (selectedIds.length === 1 && typeof loadTemplates === 'function') loadTemplates(id);
   }
 
   // Pre-fill from job
