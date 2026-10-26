@@ -22,13 +22,12 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
     <div class="form-card">
       <h2 class="card-title">Client</h2>
       <div class="field">
-        <label>Client</label>
-        <select name="client_id" id="client_select">
-          <option value="">— Choose client —</option>
-          {% for c in clients %}
-          <option value="{{ c.id }}" {% if c.id == doc.client_id %}selected{% endif %}>{{ c.display_name }}</option>
-          {% endfor %}
-        </select>
+        <label>Client(s)</label>
+        <div id="client-ids-container"></div>
+        <div id="client-pills-row" class="pill-row">
+          <span class="pill-placeholder" id="client-pills-empty" style="display:none;">No clients added</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" id="add-client-pill-btn" style="margin-top:8px;">+ Add Client</button>
       </div>
     </div>
 
@@ -153,10 +152,128 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
   </div>
 </div>
 
+
+  <!-- Client lightbox -->
+  <div class="modal-overlay hidden" id="client-lightbox">
+    <div class="modal-card" style="max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
+        <span style="font-weight:600;">Add Client</span>
+        <button type="button" id="cl-close-btn" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);">&times;</button>
+      </div>
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);">
+        <input type="text" id="cl-search" placeholder="Search clients…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:14px;" autocomplete="off" />
+      </div>
+      <div id="cl-body" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;">
+        <button type="button" id="cl-cancel-btn" class="btn btn-sm btn-outline">Cancel</button>
+      </div>
+    </div>
+  </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const DOC_TYPE = "{{ doc.doc_type }}";
+const ALL_CLIENTS    = {{ clients | tojson }};
+const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
+
+(function(){
+  const pRow      = document.getElementById('client-pills-row');
+  const idsBox    = document.getElementById('client-ids-container');
+  const emptyNote = document.getElementById('client-pills-empty');
+  const lightbox  = document.getElementById('client-lightbox');
+  const clSearch  = document.getElementById('cl-search');
+  const clBody    = document.getElementById('cl-body');
+
+  // Build label map from ALL_CLIENTS
+  const labelMap = {};
+  ALL_CLIENTS.forEach(c => {
+    labelMap[c.id] = c.display_name || c.company_name || c.name || c.id.slice(0,8);
+  });
+
+  let selectedIds = [];
+
+  function addClient(id, label) {
+    if (selectedIds.includes(id)) return;
+    selectedIds.push(id);
+    labelMap[id] = label || labelMap[id] || id.slice(0,8);
+    renderPills();
+    syncHiddenInputs();
+  }
+
+  function removeClient(id) {
+    selectedIds = selectedIds.filter(x => x !== id);
+    renderPills();
+    syncHiddenInputs();
+  }
+
+  function renderPills() {
+    pRow.querySelectorAll('.pill').forEach(p => p.remove());
+    emptyNote.style.display = selectedIds.length === 0 ? '' : 'none';
+    selectedIds.forEach(id => {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.innerHTML = (labelMap[id] || id.slice(0,8)) + ' <button type="button" class="pill-remove" aria-label="Remove">&times;</button>';
+      pill.querySelector('.pill-remove').addEventListener('click', () => removeClient(id));
+      pRow.appendChild(pill);
+    });
+  }
+
+  function syncHiddenInputs() {
+    idsBox.innerHTML = '';
+    selectedIds.forEach(id => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'client_ids'; inp.value = id;
+      idsBox.appendChild(inp);
+    });
+  }
+
+  // Pre-fill from existing doc clients
+  PREFILL_CLIENTS.forEach(c => addClient(c.id, c.label));
+
+  // Lightbox
+  function renderLightbox(filter) {
+    const q = (filter || '').toLowerCase();
+    const items = ALL_CLIENTS.filter(c => {
+      const txt = (c.display_name + ' ' + (c.email || '') + ' ' + (c.city || '')).toLowerCase();
+      return !q || txt.includes(q);
+    });
+    if (items.length === 0) {
+      clBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No clients found</div>';
+      return;
+    }
+    clBody.innerHTML = '';
+    items.forEach(c => {
+      const added = selectedIds.includes(c.id);
+      const row = document.createElement('div');
+      row.className = 'cl-row' + (added ? ' cl-row-added' : '');
+      const sub = [c.email, c.city].filter(Boolean).join(' · ');
+      row.innerHTML = `
+        <div class="cl-row-info">
+          <span class="cl-row-name">${labelMap[c.id] || c.id.slice(0,8)}</span>
+          ${sub ? `<span class="cl-row-sub">${sub}</span>` : ''}
+        </div>
+        ${added ? '<span class="cl-row-check">&#10003;</span>' : ''}`;
+      if (!added) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('mousedown', e => {
+          e.preventDefault();
+          addClient(c.id, labelMap[c.id]);
+          closeLightbox();
+        });
+      }
+      clBody.appendChild(row);
+    });
+  }
+
+  function openLightbox() { clSearch.value = ''; renderLightbox(''); lightbox.classList.remove('hidden'); requestAnimationFrame(() => clSearch.focus()); }
+  function closeLightbox() { lightbox.classList.add('hidden'); }
+
+  document.getElementById('add-client-pill-btn').addEventListener('click', e => { e.stopPropagation(); openLightbox(); });
+  document.getElementById('cl-close-btn').addEventListener('click', closeLightbox);
+  document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+  clSearch.addEventListener('input', () => renderLightbox(clSearch.value));
+})();
 </script>
 {% endblock %}
