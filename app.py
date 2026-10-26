@@ -1499,7 +1499,7 @@ def _job_overview(job_docs, anchor, job_currency=None):
         'project_total': project_total,
         'amount_billed': amount_billed,
         'amount_paid': amount_paid,
-        'balance_outstanding': amount_billed - amount_paid,
+        'balance_outstanding': project_total - amount_paid,
         'voided_received': voided_received,
     }
 
@@ -1960,9 +1960,10 @@ def generate_receipt_from_invoice(doc_id):
             'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
             (receipt_id, row[0], row[1]),
         )
-    # Update parent invoice: reflect full payment
+    # Update parent invoice: record paid_amount only — keep amount_due intact
+    # (invoice figures should not change; receipt is the record of payment)
     db.execute(
-        "UPDATE documents SET paid_amount=?, amount_due=0 WHERE id=? AND user_id=?",
+        "UPDATE documents SET paid_amount=? WHERE id=? AND user_id=?",
         (paid_amount, doc_id, current_user.id),
     )
     db.commit()
