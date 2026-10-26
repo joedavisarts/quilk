@@ -193,7 +193,7 @@ function insertToken(token) {
     syncHidden(); renderPills(); syncSend();
   }
 
-  renderPills(); renderPdfSelector(); syncSend();
+  syncHidden(); renderPills(); renderPdfSelector(); syncSend();
 
   // Lightbox for adding more recipients
   const lbHtml = '<div class="modal-overlay" id="rl-box" style="display:none;"><div class="modal-card" role="dialog" aria-modal="true" style="max-width:440px;"><div class="modal-header"><h3>Add Recipient</h3><button type="button" class="modal-close" id="rl-close">&times;</button></div><div class="modal-search"><input type="text" id="rl-search" placeholder="Search clients..." autocomplete="off"></div><div class="modal-body" id="rl-body" style="max-height:340px;overflow-y:auto;"></div><div class="modal-footer"><button type="button" class="btn btn-outline btn-sm" id="rl-cancel">Cancel</button></div></div></div>';
