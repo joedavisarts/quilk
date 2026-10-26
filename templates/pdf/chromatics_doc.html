@@ -22,7 +22,7 @@ body { margin: 0; background: #060606; color: #F0F0F0; }
   padding-top: 28px;
   margin-bottom: 18px;
 }
-.logo-block img { height: 34px; width: auto; display: block; }
+.logo-block img { height: 64px; width: auto; display: block; }
 .logo-placeholder { font-size: 22px; font-weight: 900; letter-spacing: 4px; color: #F0F0F0; }
 .header-right { text-align: right; font-size: 9pt; line-height: 1.75; color: #999; }
 .doc-type-label {
@@ -216,7 +216,7 @@ body { margin: 0; background: #060606; color: #F0F0F0; }
   <p style="font-size:8.5pt;color:#888;margin-bottom:14pt;"><em>{{ doc.notes }}</em></p>
   {% endif %}
 
-  {% if user.payment_methods %}
+  {% if user.payment_methods and doc.doc_type == 'invoice' %}
   <div class="next-page-notice">Payment details on the following page.</div>
   {% endif %}
 
@@ -230,7 +230,7 @@ body { margin: 0; background: #060606; color: #F0F0F0; }
 
 </div>
 
-{% if user.payment_methods %}
+{% if user.payment_methods and doc.doc_type == 'invoice' %}
 <!-- PAGE 2: Methods of Payment -->
 <div style="page-break-before: always;"></div>
 <div class="paper">

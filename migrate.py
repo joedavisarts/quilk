@@ -353,16 +353,16 @@ def migrate():
             (
                 'chromatics',
                 generate_password_hash(CHROMATICS_PASSWORD),
-                'josephdavismusic@gmail.com',
-                'Joe Davis',
-                'Music Producer & Composer',
+                'contact@bychromatics.com',
                 'Chromatics Creative Studios',
                 '',
-                'josephdavismusic@gmail.com',
+                'Chromatics Creative Studios',
+                '',
+                'contact@bychromatics.com',
                 None,  # no phone on Chromatics docs
-                '16 Liguanea Way',
-                'Liguanea, Kingston',
-                'Jamaica, W.I.',
+                '5 Balmoral Avenue',
+                'Half Way Tree, Kingston 5',
+                'St. Andrew, Jamaica',
                 '#DAB322',
                 '#77600B',
                 'chromatics_logo.png',
@@ -379,6 +379,23 @@ def migrate():
         print('✓ Inserted user: chromatics')
     else:
         print('- chromatics already exists, skipping insert')
+
+    # 3c. Correct chromatics user fields (idempotent)
+    c.execute("""UPDATE users SET
+        email               = 'contact@bychromatics.com',
+        display_name        = 'Chromatics Creative Studios',
+        title               = '',
+        business_name       = 'Chromatics Creative Studios',
+        business_email      = 'contact@bychromatics.com',
+        business_phone      = NULL,
+        address_line1       = '5 Balmoral Avenue',
+        address_line2       = 'Half Way Tree, Kingston 5',
+        address_country     = 'St. Andrew, Jamaica',
+        accent_color        = '#DAB322',
+        accent_color_dark   = '#77600B'
+    WHERE username = 'chromatics'""")
+    db.commit()
+    print('\u2713 Corrected chromatics user fields')
 
     # ------------------------------------------------------------------
     # 4. Add user_id columns to clients / documents / item_library
