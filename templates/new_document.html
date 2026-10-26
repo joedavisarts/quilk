@@ -351,8 +351,7 @@ const DOC_TYPE = "{{ doc_type }}";
         row.addEventListener('click', e => {
           e.stopPropagation();
           addClient(c.id, labelMap[c.id]);
-          renderLightbox(clSearch.value); // show checkmark briefly
-          setTimeout(closeLightbox, 120);
+          closeLightbox();
         });
       }
       clBody.appendChild(row);

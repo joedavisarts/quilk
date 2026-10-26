@@ -193,6 +193,34 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
 
   let selectedIds = [];
 
+  const saveBtn = document.getElementById('save-btn');
+
+  function syncSaveBtn() {
+    saveBtn.disabled = selectedIds.length === 0;
+  }
+
+  function renderPills() {
+    pRow.querySelectorAll('.pill').forEach(p => p.remove());
+    emptyNote.style.display = selectedIds.length === 0 ? '' : 'none';
+    selectedIds.forEach(id => {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.innerHTML = (labelMap[id] || id.slice(0,8)) + ' <button type="button" class="pill-remove" aria-label="Remove">&times;</button>';
+      pill.querySelector('.pill-remove').addEventListener('click', () => removeClient(id));
+      pRow.appendChild(pill);
+    });
+    syncSaveBtn();
+  }
+
+  function syncHiddenInputs() {
+    idsBox.innerHTML = '';
+    selectedIds.forEach(id => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'client_ids'; inp.value = id;
+      idsBox.appendChild(inp);
+    });
+  }
+
   function addClient(id, label) {
     if (selectedIds.includes(id)) return;
     selectedIds.push(id);
@@ -207,41 +235,8 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
     syncHiddenInputs();
   }
 
-  function renderPills() {
-    pRow.querySelectorAll('.pill').forEach(p => p.remove());
-    emptyNote.style.display = selectedIds.length === 0 ? '' : 'none';
-    selectedIds.forEach(id => {
-      const pill = document.createElement('span');
-      pill.className = 'pill';
-      pill.innerHTML = (labelMap[id] || id.slice(0,8)) + ' <button type="button" class="pill-remove" aria-label="Remove">&times;</button>';
-      pill.querySelector('.pill-remove').addEventListener('click', () => removeClient(id));
-      pRow.appendChild(pill);
-    });
-  }
-
-  function syncHiddenInputs() {
-    idsBox.innerHTML = '';
-    selectedIds.forEach(id => {
-      const inp = document.createElement('input');
-      inp.type = 'hidden'; inp.name = 'client_ids'; inp.value = id;
-      idsBox.appendChild(inp);
-    });
-  }
-
   // Pre-fill from existing doc clients
   PREFILL_CLIENTS.forEach(c => addClient(c.id, c.label));
-
-  const saveBtn = document.getElementById('save-btn');
-  function syncSaveBtn() {
-    saveBtn.disabled = selectedIds.length === 0;
-  }
-  // hook into removeClient and addClient via re-render
-  const _origRenderPills = renderPills;
-  function renderPills() {
-    _origRenderPills();
-    syncSaveBtn();
-  }
-  syncSaveBtn();
 
   // Lightbox
   function renderLightbox(filter) {
@@ -268,8 +263,8 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
         ${added ? '<span class="cl-row-check">&#10003;</span>' : ''}`;
       if (!added) {
         row.style.cursor = 'pointer';
-        row.addEventListener('mousedown', e => {
-          e.preventDefault();
+        row.addEventListener('click', e => {
+          e.stopPropagation();
           addClient(c.id, labelMap[c.id]);
           closeLightbox();
         });
