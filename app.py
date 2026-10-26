@@ -458,8 +458,11 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
         greeting_html = f'<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 20px 0;">Good day,</p>'
         plain = _email_body_text(first_name, doc_number, doc_type, user)
 
+    is_chromatics = user.get('username') == 'chromatics'
+    # Chromatics uses black email logo; height 60 instead of 48
+    _logo_height = 60 if is_chromatics else 48
     if logo_path and os.path.exists(logo_path):
-        logo_html = f'<img src="cid:logo" height="48" alt="{biz}" style="display:block;width:auto;" />'
+        logo_html = f'<img src="cid:logo" height="{_logo_height}" alt="{biz}" style="display:block;width:auto;" />'
     else:
         logo_html = (
             f'<div style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;'
@@ -502,6 +505,37 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
             f'{user["title"]}</p>'
         )
 
+    # --- Chromatics-specific overrides ---
+    if is_chromatics:
+        top_bar_color    = '#000000'
+        bottom_bar_color = '#000000'
+        header_right_html = ''  # no biz name text next to logo
+        # Social: Instagram only at bychromatics
+        social_html = (
+            '<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;'
+            'font-size:11px;color:#888888;text-align:center;margin:0 0 14px 0;">'
+            '<a href="https://www.instagram.com/bychromatics" style="color:#888888;text-decoration:none;">Instagram</a>'
+            '</p>'
+        )
+        # Sign-off: Warmest regards / Management / Chromatics Creative Studios
+        signoff_html = (
+            '<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 4px 0;">Warmest regards,</p>'
+            f'<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;font-weight:700;line-height:26px;margin:0 0 4px 0;">{biz}</p>'
+            '<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:13px;color:#555555;font-weight:600;letter-spacing:0.04em;margin:0;">Management</p>'
+        )
+    else:
+        top_bar_color    = accent
+        bottom_bar_color = accent_dark
+        header_right_html = (
+            f'<span style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;'
+            f'font-size:13px;font-weight:700;color:{accent};letter-spacing:0.05em;">{biz.upper()}</span>'
+        )
+        signoff_html = (
+            f'<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 4px 0;">Warmest Regards,</p>'
+            f'<p style="font-family:\'Nunito Sans\',\'Avenir\',Arial,sans-serif;font-size:16px;color:#0E0E0E;font-weight:700;line-height:26px;margin:0 0 4px 0;">{user["display_name"]}</p>'
+            f'{title_line}'
+        )
+
     html = f"""<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
@@ -517,14 +551,14 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
   <tr><td align="center" style="padding:24px 12px;">
     <table border="0" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background-color:#ffffff;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
       <!-- Top bar -->
-      <tr><td height="4" style="background-color:{accent};font-size:0;line-height:0;">&nbsp;</td></tr>
+      <tr><td height="4" style="background-color:{top_bar_color};font-size:0;line-height:0;">&nbsp;</td></tr>
       <!-- Header -->
       <tr><td style="padding:32px 40px 0 40px;">
         <table border="0" cellpadding="0" cellspacing="0" width="100%">
           <tr>
             <td style="vertical-align:middle;width:60px;">{logo_html}</td>
             <td style="vertical-align:middle;text-align:right;padding-left:16px;">
-              <span style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:13px;font-weight:700;color:{accent};letter-spacing:0.05em;">{biz.upper()}</span>
+              {header_right_html}
             </td>
           </tr>
         </table>
@@ -535,9 +569,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
       </td></tr>
       <!-- Sign-off -->
       <tr><td style="padding:24px 40px 32px 40px;">
-        <p style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;line-height:26px;margin:0 0 4px 0;">Warmest Regards,</p>
-        <p style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:16px;color:#0E0E0E;font-weight:700;line-height:26px;margin:0 0 4px 0;">{user['display_name']}</p>
-        {title_line}
+        {signoff_html}
       </td></tr>
       <!-- Divider -->
       <tr><td style="padding:0 40px;">
@@ -556,7 +588,7 @@ def build_html_email(first_name, doc_number, doc_type, logo_path, user, body_tex
         <p style="font-family:'Nunito Sans','Avenir',Arial,sans-serif;font-size:11px;color:#555555;text-align:center;margin:0;">Any questions? Just reply directly.</p>
       </td></tr>
       <!-- Bottom bar -->
-      <tr><td height="4" style="background-color:{accent_dark};font-size:0;line-height:0;">&nbsp;</td></tr>
+      <tr><td height="4" style="background-color:{bottom_bar_color};font-size:0;line-height:0;">&nbsp;</td></tr>
     </table>
   </td></tr>
 </table>
@@ -2203,7 +2235,8 @@ def send_document(doc_id):
     body_raw = request.form.get('body_text', body_tpl).strip()
     subject = _resolve_placeholders(subject_raw, doc, client, user_dict)
     body_text = _resolve_placeholders(body_raw, doc, client, user_dict)
-    logo_path = os.path.join(ASSETS_DIR, current_user.logo_filename or 'logo.png')
+    _email_logo = 'chromatics_logo_email.png' if current_user.username == 'chromatics' else (current_user.logo_filename or 'logo.png')
+    logo_path = os.path.join(ASSETS_DIR, _email_logo)
 
     db = get_db()
     try:
@@ -2313,7 +2346,8 @@ def remind_document(doc_id):
     body_raw = request.form.get('body_text', body_tpl).strip()
     subject = _resolve_placeholders(subject_raw, doc, client, user_dict)
     body_text = _resolve_placeholders(body_raw, doc, client, user_dict)
-    logo_path = os.path.join(ASSETS_DIR, current_user.logo_filename or 'logo.png')
+    _email_logo = 'chromatics_logo_email.png' if current_user.username == 'chromatics' else (current_user.logo_filename or 'logo.png')
+    logo_path = os.path.join(ASSETS_DIR, _email_logo)
 
     db = get_db()
     try:
