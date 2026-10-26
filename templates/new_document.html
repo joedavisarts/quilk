@@ -348,12 +348,11 @@ const DOC_TYPE = "{{ doc_type }}";
         ${added ? '<span class="cl-row-check">✓</span>' : ''}`;
       if (!added) {
         row.style.cursor = 'pointer';
-        row.addEventListener('mousedown', e => {
-          e.preventDefault();
+        row.addEventListener('click', e => {
+          e.stopPropagation();
           addClient(c.id, labelMap[c.id]);
-          _lightboxJustClosed = true;
-          closeLightbox();
-          requestAnimationFrame(() => { _lightboxJustClosed = false; });
+          renderLightbox(clSearch.value); // show checkmark briefly
+          setTimeout(closeLightbox, 120);
         });
       }
       clBody.appendChild(row);
@@ -371,10 +370,9 @@ const DOC_TYPE = "{{ doc_type }}";
     lightbox.classList.add('hidden');
   }
 
-  let _lightboxJustClosed = false;
   document.getElementById('add-client-pill-btn').addEventListener('click', e => {
     e.stopPropagation();
-    if (!_lightboxJustClosed) openLightbox();
+    openLightbox();
   });
   document.getElementById('cl-close-btn').addEventListener('click', closeLightbox);
   document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);

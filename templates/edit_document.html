@@ -128,7 +128,7 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
   <!-- ACTIONS -->
   <div class="form-actions">
     <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="btn btn-outline">Cancel</a>
-    <button type="submit" class="btn btn-gold">Save Changes</button>
+    <button type="submit" class="btn btn-gold" id="save-btn" disabled>Save Changes</button>
   </div>
 
 </form>
@@ -230,6 +230,18 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
 
   // Pre-fill from existing doc clients
   PREFILL_CLIENTS.forEach(c => addClient(c.id, c.label));
+
+  const saveBtn = document.getElementById('save-btn');
+  function syncSaveBtn() {
+    saveBtn.disabled = selectedIds.length === 0;
+  }
+  // hook into removeClient and addClient via re-render
+  const _origRenderPills = renderPills;
+  function renderPills() {
+    _origRenderPills();
+    syncSaveBtn();
+  }
+  syncSaveBtn();
 
   // Lightbox
   function renderLightbox(filter) {
