@@ -21,9 +21,27 @@
     <div class="form-card">
       <h2 class="card-title">Email Details</h2>
 
+      <!-- Recipients as removable pills -->
       <div class="field">
         <label>To</label>
-        <input type="email" name="to_email" value="{{ to_email }}" required placeholder="recipient@example.com" />
+        <div id="recipient-ids-container"></div>
+        <div id="recipient-pills-row" class="pill-row">
+          <span id="recipient-pills-empty" class="pill-placeholder" style="display:none;">No recipients added</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" id="add-recipient-btn" style="margin-top:8px;">+ Add Recipient</button>
+      </div>
+
+      <!-- PDF addressed-to multi-select (shown when 2+ doc clients) -->
+      <div class="field" id="pdf-client-field" style="display:none;">
+        <label>PDF addressed to</label>
+        <div id="pdf-client-checkboxes" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+        <div id="pdf-no-client-warning" class="flash flash-error" style="display:none;margin-top:8px;">
+          PDF needs at least one client addressed to — please select at least one above.
+        </div>
+        <div id="pdf-multi-client-warning" class="flash flash-warn" style="display:none;margin-top:8px;">
+          Multiple clients on one PDF may affect layout.
+          <button type="button" id="dismiss-multi-warn" style="margin-left:8px;background:none;border:none;cursor:pointer;font-size:14px;">&#x2715;</button>
+        </div>
       </div>
 
       <div class="field">
@@ -75,7 +93,7 @@
 
   <div class="form-actions">
     <a href="{{ url_for('document_view', doc_id=doc.id) }}" class="btn btn-outline">Cancel</a>
-    <button type="submit" class="btn btn-gold">{% if is_reminder %}Send Reminder{% else %}Send Email{% endif %}</button>
+    <button type="submit" class="btn btn-gold" id="send-btn">{% if is_reminder %}Send Reminder{% else %}Send Email{% endif %}</button>
   </div>
 
 </form>
@@ -91,6 +109,116 @@ function insertToken(token) {
   ta.selectionStart = ta.selectionEnd = start + token.length;
   ta.focus();
 }
+
+// ── Multi-recipient pill + PDF client selector ─────────────────────────
+(function() {
+  const DOC_CLIENTS = {{ doc_clients | default([]) | tojson }};
+  const ALL_CLIENTS = {{ all_clients | default([]) | tojson }};
+  const IS_REMINDER_V = {{ 'true' if is_reminder else 'false' }};
+
+  const pillsRow     = document.getElementById('recipient-pills-row');
+  const emptyNote    = document.getElementById('recipient-pills-empty');
+  const idsContainer = document.getElementById('recipient-ids-container');
+  const sendBtn      = document.getElementById('send-btn');
+  const pdfField     = document.getElementById('pdf-client-field');
+  const pdfCBs       = document.getElementById('pdf-client-checkboxes');
+  const noClientWarn = document.getElementById('pdf-no-client-warning');
+  const multiWarn    = document.getElementById('pdf-multi-client-warning');
+
+  let recipients = [];
+  const PREFILL = {{ recipients_default | default([]) | tojson }};
+  PREFILL.forEach(r => { if (r.email) recipients.push(r); });
+
+  function syncSend() {
+    const hasR = recipients.length > 0;
+    if (IS_REMINDER_V || DOC_CLIENTS.length <= 1) { sendBtn.disabled = !hasR; return; }
+    const checked = pdfCBs.querySelectorAll('input[type=checkbox]:checked');
+    sendBtn.disabled = !(hasR && checked.length > 0);
+  }
+
+  function renderPdfSelector() {
+    if (DOC_CLIENTS.length <= 1) { pdfField.style.display = 'none'; return; }
+    pdfField.style.display = '';
+    pdfCBs.innerHTML = '';
+    DOC_CLIENTS.forEach((c, i) => {
+      const wrap = document.createElement('label');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.name = 'pdf_client_ids'; cb.value = c.id; cb.checked = (i === 0);
+      cb.addEventListener('change', () => {
+        const chk = pdfCBs.querySelectorAll('input:checked');
+        noClientWarn.style.display = chk.length === 0 ? '' : 'none';
+        multiWarn.style.display = chk.length > 1 ? '' : 'none';
+        syncSend();
+      });
+      wrap.appendChild(cb);
+      wrap.appendChild(document.createTextNode(' ' + (c.display_name || c.name || c.company_name || c.id.slice(0,8))));
+      pdfCBs.appendChild(wrap);
+    });
+    const dismissBtn = document.getElementById('dismiss-multi-warn');
+    if (dismissBtn) dismissBtn.addEventListener('click', () => { multiWarn.style.display = 'none'; });
+  }
+
+  function syncHidden() {
+    idsContainer.innerHTML = '';
+    recipients.forEach(r => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'recipient_emails'; inp.value = r.email;
+      idsContainer.appendChild(inp);
+    });
+  }
+
+  function renderPills() {
+    pillsRow.querySelectorAll('.recipient-pill').forEach(p => p.remove());
+    emptyNote.style.display = recipients.length === 0 ? '' : 'none';
+    recipients.forEach(r => {
+      const pill = document.createElement('span');
+      pill.className = 'recipient-pill pill';
+      pill.innerHTML = (r.label || r.email) + ' <button type="button" class="pill-remove" aria-label="Remove">&times;</button>';
+      pill.querySelector('.pill-remove').addEventListener('click', () => {
+        recipients = recipients.filter(x => x.email !== r.email);
+        syncHidden(); renderPills(); syncSend();
+      });
+      pillsRow.appendChild(pill);
+    });
+  }
+
+  function addRecipient(c) {
+    if (!c.email) return;
+    if (recipients.some(r => r.email === c.email)) return;
+    recipients.push({id: c.id || '', label: c.display_name || c.name || c.company_name || '', email: c.email});
+    syncHidden(); renderPills(); syncSend();
+  }
+
+  renderPills(); renderPdfSelector(); syncSend();
+
+  // Lightbox for adding more recipients
+  const lbHtml = '<div class="modal-overlay" id="rl-box" style="display:none;"><div class="modal-card" role="dialog" aria-modal="true" style="max-width:440px;"><div class="modal-header"><h3>Add Recipient</h3><button type="button" class="modal-close" id="rl-close">&times;</button></div><div class="modal-search"><input type="text" id="rl-search" placeholder="Search clients..." autocomplete="off"></div><div class="modal-body" id="rl-body" style="max-height:340px;overflow-y:auto;"></div><div class="modal-footer"><button type="button" class="btn btn-outline btn-sm" id="rl-cancel">Cancel</button></div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', lbHtml);
+  const rlBox = document.getElementById('rl-box');
+  const rlBody = document.getElementById('rl-body');
+  const rlSearch = document.getElementById('rl-search');
+
+  function renderRL(q) {
+    q = (q||'').toLowerCase();
+    const items = ALL_CLIENTS.filter(c => c.email && ((!q) || ((c.display_name||'')+(c.email||'')).toLowerCase().includes(q)));
+    rlBody.innerHTML = '';
+    if (!items.length) { rlBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No clients with email found</div>'; return; }
+    items.forEach(c => {
+      const added = recipients.some(r => r.email === c.email);
+      const row = document.createElement('div');
+      row.className = 'cl-row' + (added ? ' cl-row-added' : '');
+      row.innerHTML = '<div class="cl-row-info"><span class="cl-row-name">'+(c.display_name||c.email)+'</span><span class="cl-row-sub">'+c.email+'</span></div>'+(added?'<span class="cl-row-check">&#x2713;</span>':'');
+      if (!added) { row.style.cursor='pointer'; row.addEventListener('click', () => { addRecipient(c); rlBox.style.display='none'; }); }
+      rlBody.appendChild(row);
+    });
+  }
+  document.getElementById('add-recipient-btn').addEventListener('click', () => { rlSearch.value=''; renderRL(''); rlBox.style.display='flex'; requestAnimationFrame(()=>rlSearch.focus()); });
+  document.getElementById('rl-close').addEventListener('click', () => { rlBox.style.display='none'; });
+  document.getElementById('rl-cancel').addEventListener('click', () => { rlBox.style.display='none'; });
+  rlBox.addEventListener('click', e => { if(e.target===rlBox) rlBox.style.display='none'; });
+  rlSearch.addEventListener('input', () => renderRL(rlSearch.value));
+})();
 
 document.getElementById('save-template-btn').addEventListener('click', function() {
   const subject = document.getElementById('subject-input').value.trim();

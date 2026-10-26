@@ -263,7 +263,56 @@
       {% endif %}
     </dl>
   </div>
-  {% if client %}
+  {% if clients %}
+  <div class="form-card">
+    <h2 class="card-title">Client{% if clients|length > 1 %}s{% endif %}</h2>
+    {% if clients|length == 1 %}
+    {# Single client: plain detail list #}
+    {% set c = clients[0] %}
+    <dl class="detail-list">
+      <dt>Name</dt><dd><a href="{{ url_for('client_detail', client_id=c.id) }}">{{ c.display_name or c.name or c.company_name or '—' }}</a></dd>
+      {% if c.company_name and c.name %}<dt>Company</dt><dd>{{ c.company_name }}</dd>{% endif %}
+      {% if c.email %}<dt>Email</dt><dd>{{ c.email }}</dd>{% endif %}
+      {% if c.phone %}<dt>Phone</dt><dd>{{ c.phone }}</dd>{% endif %}
+      {% if c.address_line1 %}<dt>Address</dt><dd>{{ c.address_line1 }}{% if c.address_line2 %}, {{ c.address_line2 }}{% endif %}{% if c.city or c.state_region or c.zip %}<br>{{ [c.city, c.state_region, c.zip] | select | join(', ') }}{% endif %}{% if c.country %}<br>{{ c.country }}{% endif %}</dd>{% endif %}
+    </dl>
+    {% else %}
+    {# Multiple clients: horizontally-scrolling tabs #}
+    <div class="client-tabs-wrap">
+      <div class="client-tabs" id="client-tabs">
+        {% for c in clients %}
+        <button type="button" class="client-tab{% if loop.first %} active{% endif %}" data-tab="{{ loop.index0 }}">{{ c.display_name or c.name or c.company_name or '—' }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    {% for c in clients %}
+    <div class="client-tab-panel{% if not loop.first %} hidden{% endif %}" data-panel="{{ loop.index0 }}">
+      <dl class="detail-list">
+        <dt>Name</dt><dd><a href="{{ url_for('client_detail', client_id=c.id) }}">{{ c.display_name or c.name or c.company_name or '—' }}</a></dd>
+        {% if c.company_name and c.name %}<dt>Company</dt><dd>{{ c.company_name }}</dd>{% endif %}
+        {% if c.email %}<dt>Email</dt><dd>{{ c.email }}</dd>{% endif %}
+        {% if c.phone %}<dt>Phone</dt><dd>{{ c.phone }}</dd>{% endif %}
+        {% if c.address_line1 %}<dt>Address</dt><dd>{{ c.address_line1 }}{% if c.address_line2 %}, {{ c.address_line2 }}{% endif %}{% if c.city or c.state_region or c.zip %}<br>{{ [c.city, c.state_region, c.zip] | select | join(', ') }}{% endif %}{% if c.country %}<br>{{ c.country }}{% endif %}</dd>{% endif %}
+      </dl>
+    </div>
+    {% endfor %}
+    <script>
+    (function(){
+      const tabs   = document.querySelectorAll('.client-tab');
+      const panels = document.querySelectorAll('.client-tab-panel');
+      tabs.forEach((btn, i) => {
+        btn.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          panels.forEach(p => p.classList.add('hidden'));
+          btn.classList.add('active');
+          panels[i].classList.remove('hidden');
+        });
+      });
+    })();
+    </script>
+    {% endif %}
+  </div>
+  {% elif client %}
   <div class="form-card">
     <h2 class="card-title">Client</h2>
     <dl class="detail-list">

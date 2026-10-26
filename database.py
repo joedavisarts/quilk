@@ -122,6 +122,13 @@ def init_db():
             user_id     INTEGER NOT NULL REFERENCES users(id) UNIQUE,
             last_number INTEGER NOT NULL DEFAULT 1110
         );
+
+        CREATE TABLE IF NOT EXISTS document_clients (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id        INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            client_uuid   TEXT NOT NULL,
+            display_order INTEGER NOT NULL DEFAULT 0
+        );
     """)
 
     # Safely add columns that may be missing on pre-migration installs.

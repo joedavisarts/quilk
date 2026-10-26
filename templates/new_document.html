@@ -15,43 +15,21 @@
 
   <div class="form-grid">
 
-    <!-- CLIENT SECTION -->
+    <!-- CLIENT SECTION (multi-select pills) -->
     <div class="form-card">
       <h2 class="card-title">Client</h2>
 
-      {% if job_clients and job_clients|length == 1 %}
+      <!-- Hidden inputs for selected client IDs (submitted as client_ids[]) -->
+      <div id="client-ids-container"></div>
+
+      <!-- Pill row -->
       <div class="field">
-        <label>Client</label>
-        <select name="client_id" id="client_select">
-          <option value="">— Choose client —</option>
-          {% for c in clients %}
-          <option value="{{ c.id }}"{% if c.id == job_clients[0].id %} selected{% endif %}>{{ c.display_name }}</option>
-          {% endfor %}
-        </select>
-        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">Pre-filled from job — change if needed</span>
+        <label>Clients</label>
+        <div id="client-pills-row" class="pill-row">
+          <span id="client-pills-empty" class="pill-placeholder">No clients added yet</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" id="add-client-pill-btn" style="margin-top:8px;">+ Add Client</button>
       </div>
-      {% elif job_clients and job_clients|length > 1 %}
-      <div class="field">
-        <label>Client</label>
-        <select name="client_id" id="client_select">
-          <option value="">— Choose client —</option>
-          {% for c in job_clients %}
-          <option value="{{ c.id }}">{{ c.display_name }}</option>
-          {% endfor %}
-        </select>
-        <span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block;">Showing {{ job_clients|length }} clients linked to this job</span>
-      </div>
-      {% else %}
-      <div class="field">
-        <label>Select Existing Client</label>
-        <select name="client_id" id="client_select">
-          <option value="">— Choose client —</option>
-          {% for c in clients %}
-          <option value="{{ c.id }}">{{ c.display_name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
 
       <div id="template-row" class="field hidden">
         <label>Load Template</label>
@@ -66,49 +44,53 @@
       <div id="new-client-fields">
         <div class="field">
           <label>Company Name</label>
-          <input type="text" name="new_client_company_name" placeholder="Acme Corp (optional)" />
+          <input type="text" id="nc_company" placeholder="Acme Corp (optional)" />
         </div>
         <div class="field">
           <label>Contact Name</label>
-          <input type="text" name="new_client_name" id="new_client_name" placeholder="Full name (optional)" />
+          <input type="text" id="nc_name" placeholder="Full name (optional)" />
         </div>
         <div class="field-row field-row-stack-mobile">
           <div class="field">
             <label>Phone</label>
-            <input type="text" name="new_client_phone" placeholder="+1 555 000 0000" />
+            <input type="text" id="nc_phone" placeholder="+1 555 000 0000" />
           </div>
           <div class="field">
             <label>Email</label>
-            <input type="email" name="new_client_email" placeholder="email@example.com" />
+            <input type="email" id="nc_email" placeholder="email@example.com" />
           </div>
         </div>
         <div class="field">
           <label>Address Line 1</label>
-          <input type="text" name="new_client_addr1" />
+          <input type="text" id="nc_addr1" />
         </div>
         <div class="field">
           <label>Address Line 2</label>
-          <input type="text" name="new_client_addr2" />
+          <input type="text" id="nc_addr2" />
         </div>
         <div class="field-row field-row-stack-mobile">
           <div class="field">
             <label>City</label>
-            <input type="text" name="new_client_city" />
+            <input type="text" id="nc_city" />
           </div>
           <div class="field">
             <label>State / Region</label>
-            <input type="text" name="new_client_state_region" />
+            <input type="text" id="nc_state" />
           </div>
         </div>
         <div class="field-row field-row-stack-mobile">
           <div class="field">
             <label>Zip / Postcode</label>
-            <input type="text" name="new_client_zip" />
+            <input type="text" id="nc_zip" />
           </div>
           <div class="field">
             <label>Country</label>
-            {{ country_select('new_client_country') }}
+            {{ country_select('') }}
           </div>
+        </div>
+        <div style="margin-top:10px;">
+          <button type="button" class="btn btn-sm btn-outline" id="add-new-client-btn">Add Client</button>
+          <span id="nc-status" style="margin-left:10px;font-size:13px;color:var(--text-muted);"></span>
         </div>
       </div>
     </div>
@@ -219,7 +201,7 @@
   <!-- ACTIONS -->
   <div class="form-actions">
     <button type="button" id="preview-btn" class="btn btn-outline">Preview PDF</button>
-    <button type="submit" class="btn btn-gold">Save &amp; Generate PDF</button>
+    <button type="submit" class="btn btn-gold" id="save-btn" disabled>Save &amp; Generate PDF</button>
   </div>
 
 </form>
@@ -243,10 +225,215 @@
   </div>
 </div>
 
+<!-- CLIENT LIGHTBOX -->
+<div class="modal-overlay hidden" id="client-lightbox">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Add Client" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>Add Client</h3>
+      <button type="button" class="modal-close" id="cl-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-search">
+      <input type="text" id="cl-search" placeholder="Search clients…" autocomplete="off" />
+    </div>
+    <div class="modal-body" id="cl-body" style="max-height:360px;overflow-y:auto;">
+      <!-- populated by JS -->
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-sm" id="cl-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 const DOC_TYPE = "{{ doc_type }}";
+
+// ── Multi-client pill selector ──────────────────────────────────────────────
+(function() {
+  const ALL_CLIENTS = {{ clients | tojson }};
+  // Pre-fill pills from job_clients if present
+  const JOB_PREFILL = {{ (job_clients or []) | tojson }};
+
+  const pillsRow    = document.getElementById('client-pills-row');
+  const emptyNote   = document.getElementById('client-pills-empty');
+  const idsContainer = document.getElementById('client-ids-container');
+  const saveBtn     = document.getElementById('save-btn');
+  const lightbox    = document.getElementById('client-lightbox');
+  const clBody      = document.getElementById('cl-body');
+  const clSearch    = document.getElementById('cl-search');
+
+  let selectedIds = []; // ordered list of added UUIDs
+  let labelMap    = {}; // id → display_name
+
+  ALL_CLIENTS.forEach(c => { labelMap[c.id] = c.display_name || c.name || c.company_name || c.id.slice(0,8); });
+
+  function syncSaveBtn() {
+    const hasClient = selectedIds.length > 0;
+    const hasItems  = (window._lineItemCount || 0) > 0;
+    saveBtn.disabled = !(hasClient && hasItems);
+  }
+
+  function syncHiddenInputs() {
+    idsContainer.innerHTML = '';
+    selectedIds.forEach(id => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'client_ids';
+      inp.value = id;
+      idsContainer.appendChild(inp);
+    });
+  }
+
+  function renderPills() {
+    // Remove old pills (keep empty note)
+    pillsRow.querySelectorAll('.client-pill').forEach(p => p.remove());
+    if (selectedIds.length === 0) {
+      emptyNote.style.display = '';
+    } else {
+      emptyNote.style.display = 'none';
+      selectedIds.forEach(id => {
+        const pill = document.createElement('span');
+        pill.className = 'client-pill pill';
+        pill.dataset.id = id;
+        pill.innerHTML = `${labelMap[id] || id.slice(0,8)} <button type="button" class="pill-remove" aria-label="Remove">&times;</button>`;
+        pill.querySelector('.pill-remove').addEventListener('click', () => {
+          selectedIds = selectedIds.filter(i => i !== id);
+          syncHiddenInputs();
+          renderPills();
+          syncSaveBtn();
+        });
+        pillsRow.appendChild(pill);
+      });
+    }
+  }
+
+  function addClient(id, label) {
+    if (selectedIds.includes(id)) return;
+    labelMap[id] = label;
+    selectedIds.push(id);
+    syncHiddenInputs();
+    renderPills();
+    syncSaveBtn();
+    // Load templates for first client
+    if (selectedIds.length === 1) loadTemplates(id);
+  }
+
+  // Pre-fill from job
+  JOB_PREFILL.forEach(c => addClient(c.id, c.display_name || c.name || c.company_name || c.id.slice(0,8)));
+
+  // ── Lightbox ──
+  function renderLightbox(filter) {
+    const q = (filter || '').toLowerCase();
+    const items = ALL_CLIENTS.filter(c => {
+      const txt = (c.display_name + ' ' + (c.email || '') + ' ' + (c.city || '')).toLowerCase();
+      return !q || txt.includes(q);
+    });
+    if (items.length === 0) {
+      clBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">No clients found</div>';
+      return;
+    }
+    clBody.innerHTML = '';
+    items.forEach(c => {
+      const added = selectedIds.includes(c.id);
+      const row = document.createElement('div');
+      row.className = 'cl-row' + (added ? ' cl-row-added' : '');
+      const sub = [c.email, c.city].filter(Boolean).join(' · ');
+      row.innerHTML = `
+        <div class="cl-row-info">
+          <span class="cl-row-name">${labelMap[c.id] || c.id.slice(0,8)}</span>
+          ${sub ? `<span class="cl-row-sub">${sub}</span>` : ''}
+        </div>
+        ${added ? '<span class="cl-row-check">✓</span>' : ''}`;
+      if (!added) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', () => {
+          addClient(c.id, labelMap[c.id]);
+          closeLightbox();
+        });
+      }
+      clBody.appendChild(row);
+    });
+  }
+
+  function openLightbox() {
+    clSearch.value = '';
+    renderLightbox('');
+    lightbox.classList.remove('hidden');
+    requestAnimationFrame(() => clSearch.focus());
+  }
+
+  function closeLightbox() {
+    lightbox.classList.add('hidden');
+  }
+
+  document.getElementById('add-client-pill-btn').addEventListener('click', openLightbox);
+  document.getElementById('cl-close-btn').addEventListener('click', closeLightbox);
+  document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+  clSearch.addEventListener('input', () => renderLightbox(clSearch.value));
+
+  // ── "Add Client" button in create-new section ──
+  const addNewBtn = document.getElementById('add-new-client-btn');
+  const ncStatus  = document.getElementById('nc-status');
+
+  // Grab the country select (last select in new-client-fields that isn't a named form field)
+  const ncFields = document.getElementById('new-client-fields');
+  const ncCountrySelect = ncFields.querySelector('select');
+
+  addNewBtn.addEventListener('click', async () => {
+    const company = document.getElementById('nc_company').value.trim();
+    const name    = document.getElementById('nc_name').value.trim();
+    if (!company && !name) {
+      ncStatus.textContent = 'Enter a name or company first.';
+      ncStatus.style.color = 'var(--error, red)';
+      return;
+    }
+    addNewBtn.disabled = true;
+    ncStatus.textContent = 'Saving…';
+    ncStatus.style.color = 'var(--text-muted)';
+    try {
+      const res = await fetch('/api/clients/create-quick', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          company_name:  company,
+          name:          name,
+          email:         document.getElementById('nc_email').value.trim(),
+          phone:         document.getElementById('nc_phone').value.trim(),
+          address_line1: document.getElementById('nc_addr1').value.trim(),
+          address_line2: document.getElementById('nc_addr2').value.trim(),
+          city:          document.getElementById('nc_city').value.trim(),
+          state_region:  document.getElementById('nc_state').value.trim(),
+          zip:           document.getElementById('nc_zip').value.trim(),
+          country:       ncCountrySelect ? ncCountrySelect.value : '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      // Add to master list + label map
+      ALL_CLIENTS.push({id: data.id, display_name: data.label, email: '', city: ''});
+      addClient(data.id, data.label);
+      // Clear fields
+      ['nc_company','nc_name','nc_email','nc_phone','nc_addr1','nc_addr2','nc_city','nc_state','nc_zip']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      if (ncCountrySelect) ncCountrySelect.value = '';
+      ncStatus.textContent = `Added: ${data.label}`;
+      ncStatus.style.color = 'var(--success, green)';
+    } catch(err) {
+      ncStatus.textContent = err.message;
+      ncStatus.style.color = 'var(--error, red)';
+    } finally {
+      addNewBtn.disabled = false;
+    }
+  });
+
+  // ── Save button gating: also watch line items ──
+  // Line item counter hook — updated by line-items JS (window._lineItemCount)
+  const origSync = syncSaveBtn;
+  window._syncSaveBtn = syncSaveBtn;
+  syncSaveBtn(); // initial state
+})();
 </script>
 {% endblock %}

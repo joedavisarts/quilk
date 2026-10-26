@@ -750,32 +750,13 @@ def new_document(doc_type):
 
     if request.method == 'POST':
         data = request.form
-        client_uuid = data.get('client_id') or None
+        client_ids = [cid for cid in request.form.getlist('client_ids') if cid.strip()]
 
-        new_name = data.get('new_client_name', '').strip()
-        new_company = data.get('new_client_company_name', '').strip()
-        if new_name or new_company:
-            new_client_uuid = str(uuid.uuid4())
-            sb.table('clients').insert({
-                'id': new_client_uuid,
-                'quilk_user_id': current_user.id,
-                'client_name': new_name,
-                'artist_company_name': new_company or None,
-                'email': data.get('new_client_email') or None,
-                'phone': data.get('new_client_phone') or None,
-                'address_line1': (data.get('new_client_addr1') or '').strip() or None,
-                'address_line2': (data.get('new_client_addr2') or '').strip() or None,
-                'city': (data.get('new_client_city') or '').strip() or None,
-                'state_region': (data.get('new_client_state_region') or '').strip() or None,
-                'zip': (data.get('new_client_zip') or '').strip() or None,
-                'country': (data.get('new_client_country') or '').strip() or None,
-                'notes': data.get('new_client_notes') or None,
-            }).execute()
-            client_uuid = new_client_uuid
-
-        if not client_uuid:
+        if not client_ids:
             db.close()
             return jsonify({'error': 'Client required'}), 400
+
+        client_uuid = client_ids[0]  # primary / fallback for legacy columns
 
         line_items = json.loads(data.get('line_items_json', '[]'))
         discount_val = float(data.get('discount_val', 0))
@@ -806,6 +787,14 @@ def new_document(doc_type):
              current_user.id, job_id),
         )
         doc_id = cur.lastrowid
+        db.commit()
+
+        # Write multi-client links to junction table
+        for order, cid in enumerate(client_ids):
+            db.execute(
+                'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
+                (doc_id, cid, order),
+            )
         db.commit()
 
         for item in line_items:
@@ -880,6 +869,41 @@ def new_document(doc_type):
                            prefill_job_id=prefill_job_id,
                            job_clients=job_clients,
                            prefill_currency=prefill_currency)
+
+
+# ---------------------------------------------------------------------------
+# Quick-create client API (used by multi-client pill selector)
+# ---------------------------------------------------------------------------
+
+@app.route('/api/clients/create-quick', methods=['POST'])
+@login_required
+def create_client_quick():
+    data = request.get_json(force=True) or {}
+    new_name    = (data.get('name') or '').strip()
+    new_company = (data.get('company_name') or '').strip()
+    if not new_name and not new_company:
+        return jsonify({'error': 'Name or company required'}), 400
+    new_uuid = str(uuid.uuid4())
+    sb.table('clients').insert({
+        'id':                  new_uuid,
+        'quilk_user_id':       current_user.id,
+        'client_name':         new_name or None,
+        'artist_company_name': new_company or None,
+        'email':               data.get('email') or None,
+        'phone':               data.get('phone') or None,
+        'address_line1':       (data.get('address_line1') or '').strip() or None,
+        'address_line2':       (data.get('address_line2') or '').strip() or None,
+        'city':                (data.get('city') or '').strip() or None,
+        'state_region':        (data.get('state_region') or '').strip() or None,
+        'zip':                 (data.get('zip') or '').strip() or None,
+        'country':             (data.get('country') or '').strip() or None,
+        'notes':               data.get('notes') or None,
+    }).execute()
+    # Build display label using same deduplication helper
+    client_map = _sb_client_map(current_user.id)
+    labels = _client_display_labels_from_list(list(client_map.values()))
+    label = labels.get(new_uuid, new_company or new_name or new_uuid[:8])
+    return jsonify({'id': new_uuid, 'label': label})
 
 
 # ---------------------------------------------------------------------------
@@ -1550,11 +1574,31 @@ def document_view(doc_id):
         abort(404)
     doc['line_items'] = _parse_line_items(doc['line_items'])
 
-    client = None
-    if doc.get('client_uuid'):
-        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
-        if result.data:
-            client = _normalize_sb_client(result.data[0])
+    # Multi-client: try document_clients junction table first, fall back to client_uuid
+    doc_client_rows = db.execute(
+        'SELECT client_uuid FROM document_clients WHERE doc_id=? ORDER BY display_order',
+        (doc_id,),
+    ).fetchall()
+    if doc_client_rows:
+        client_uuids_ordered = [r['client_uuid'] for r in doc_client_rows]
+    elif doc.get('client_uuid'):
+        client_uuids_ordered = [doc['client_uuid']]
+    else:
+        client_uuids_ordered = []
+
+    clients = []
+    if client_uuids_ordered:
+        raw = sb.table('clients').select('*').in_('id', client_uuids_ordered).execute()
+        client_map_raw = {r['id']: _normalize_sb_client(r) for r in (raw.data or [])}
+        clients = [client_map_raw[uid] for uid in client_uuids_ordered if uid in client_map_raw]
+
+    # Legacy single-client alias so existing template refs still work
+    client = clients[0] if clients else None
+
+    # Build display labels for tab titles
+    labels = _client_display_labels_from_list(clients)
+    for c in clients:
+        c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '')
 
     sent_logs = _rows_to_list(
         db.execute(
@@ -1629,6 +1673,7 @@ def document_view(doc_id):
         'document_view.html',
         doc=doc,
         client=client,
+        clients=clients,
         sent_logs=sent_logs,
         parent_doc=parent_doc,
         child_docs=child_docs,
@@ -1983,7 +2028,11 @@ def edit_document(doc_id):
 
     if request.method == 'POST':
         data = request.form
-        client_uuid = data.get('client_id') or doc.get('client_uuid')
+        client_ids = [cid for cid in request.form.getlist('client_ids') if cid.strip()]
+        # Fall back to legacy single field if pills not submitted
+        if not client_ids and data.get('client_id'):
+            client_ids = [data.get('client_id')]
+        client_uuid = client_ids[0] if client_ids else doc.get('client_uuid')
 
         line_items = json.loads(data.get('line_items_json', '[]'))
         discount_val = float(data.get('discount_val', 0))
@@ -2008,21 +2057,54 @@ def edit_document(doc_id):
              notes, pay_by_date, status, doc_id, current_user.id),
         )
         db.commit()
+
+        # Re-write document_clients junction rows
+        if client_ids:
+            db.execute('DELETE FROM document_clients WHERE doc_id=?', (doc_id,))
+            for order, cid in enumerate(client_ids):
+                db.execute(
+                    'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
+                    (doc_id, cid, order),
+                )
+            db.commit()
+
         _sync_gig_financials(db, doc.get('job_id'), current_user.id)
         db.close()
 
         flash('Document updated successfully.', 'success')
         return redirect(url_for('document_view', doc_id=doc_id))
 
+    # GET: load existing clients from junction table (fall back to client_uuid)
+    doc_client_rows = db.execute(
+        'SELECT client_uuid FROM document_clients WHERE doc_id=? ORDER BY display_order',
+        (doc_id,),
+    ).fetchall()
+    if doc_client_rows:
+        doc_client_ids = [r['client_uuid'] for r in doc_client_rows]
+    elif doc.get('client_uuid'):
+        doc_client_ids = [doc['client_uuid']]
+    else:
+        doc_client_ids = []
+
     clients = _sb_clients_for_user(current_user.id)
     labels = _client_display_labels_from_list(clients)
     for c in clients:
         c['display_name'] = labels.get(c['id'], c.get('company_name') or c.get('name') or '')
     clients.sort(key=lambda c: (c.get('display_name') or '').lower())
-    # Set client_id to client_uuid so the template dropdown pre-selects correctly
+
+    # Pre-select pills: list of {id, label} for already-added clients in order
+    selected_clients_raw = sb.table('clients').select('*').in_('id', doc_client_ids).execute()
+    sel_map = {r['id']: _normalize_sb_client(r) for r in (selected_clients_raw.data or [])}
+    sel_labels = _client_display_labels_from_list(list(sel_map.values()))
+    selected_clients = [
+        {'id': uid, 'label': sel_labels.get(uid, uid[:8])}
+        for uid in doc_client_ids if uid in sel_map
+    ]
+
     doc['client_id'] = doc.get('client_uuid')
     db.close()
-    return render_template('edit_document.html', doc=doc, clients=clients)
+    return render_template('edit_document.html', doc=doc, clients=clients,
+                           selected_clients=selected_clients)
 
 
 # ---------------------------------------------------------------------------
@@ -2043,11 +2125,39 @@ def send_document(doc_id):
         abort(404)
     doc['line_items'] = _parse_line_items(doc['line_items'])
 
-    client = {}
-    if doc.get('client_uuid'):
-        result = sb.table('clients').select('*').eq('id', doc['client_uuid']).execute()
-        if result.data:
-            client = _normalize_sb_client(result.data[0]) or {}
+    # Multi-client: junction table first, fall back to client_uuid
+    doc_client_rows = db.execute(
+        'SELECT client_uuid FROM document_clients WHERE doc_id=? ORDER BY display_order',
+        (doc_id,),
+    ).fetchall()
+    if doc_client_rows:
+        doc_client_uuids = [r['client_uuid'] for r in doc_client_rows]
+    elif doc.get('client_uuid'):
+        doc_client_uuids = [doc['client_uuid']]
+    else:
+        doc_client_uuids = []
+
+    doc_clients = []
+    if doc_client_uuids:
+        raw_res = sb.table('clients').select('*').in_('id', doc_client_uuids).execute()
+        raw_map = {r['id']: _normalize_sb_client(r) for r in (raw_res.data or [])}
+        doc_clients = [raw_map[uid] for uid in doc_client_uuids if uid in raw_map]
+
+    client = doc_clients[0] if doc_clients else {}
+
+    # Recipient pills: label + email for each client
+    dc_labels = _client_display_labels_from_list(doc_clients)
+    recipients_default = [
+        {'id': c['id'], 'label': dc_labels.get(c['id'], c.get('company_name') or c.get('name') or ''), 'email': c.get('email', '')}
+        for c in doc_clients if c.get('email')
+    ]
+
+    # All clients for lightbox (add more recipients)
+    all_clients = _sb_clients_for_user(current_user.id)
+    all_labels = _client_display_labels_from_list(all_clients)
+    for c in all_clients:
+        c['display_name'] = all_labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+    all_clients.sort(key=lambda c: (c.get('display_name') or '').lower())
 
     tpl_row = _row_to_dict(
         db.execute(
@@ -2063,17 +2173,32 @@ def send_document(doc_id):
     subject_tpl = (tpl_row or {}).get('subject_template') or defaults['subject_template']
     body_tpl = (tpl_row or {}).get('body_template') or defaults['body_template']
     pdf_filename = _pdf_email_filename(doc['doc_number'])
-    to_email = client.get('email', '')
 
     if request.method == 'GET':
         return render_template('send_email.html',
                                doc=doc, client=client,
+                               doc_clients=doc_clients,
+                               recipients_default=recipients_default,
+                               all_clients=all_clients,
                                subject_tpl=subject_tpl, body_tpl=body_tpl,
                                pdf_filename=pdf_filename,
-                               to_email=to_email,
                                error=None)
 
-    to_email = request.form.get('to_email', '').strip()
+    # POST: multi-recipient send
+    recipient_emails_raw = request.form.getlist('recipient_emails')
+    recipient_emails = [e.strip() for e in recipient_emails_raw if e.strip()]
+    # Fall back to legacy single to_email field
+    if not recipient_emails:
+        single = request.form.get('to_email', '').strip()
+        if single:
+            recipient_emails = [single]
+
+    # Clients to address on the PDF
+    pdf_client_ids = request.form.getlist('pdf_client_ids')
+    if not pdf_client_ids:
+        pdf_client_ids = [doc_clients[0]['id']] if doc_clients else []
+    pdf_clients = [c for c in doc_clients if c['id'] in pdf_client_ids] or (doc_clients[:1] if doc_clients else [])
+
     subject_raw = request.form.get('subject', subject_tpl).strip()
     body_raw = request.form.get('body_text', body_tpl).strip()
     subject = _resolve_placeholders(subject_raw, doc, client, user_dict)
@@ -2082,24 +2207,26 @@ def send_document(doc_id):
 
     db = get_db()
     try:
-        pdf_bytes = generate_pdf(doc, client, user_dict)
+        pdf_bytes = generate_pdf(doc, pdf_clients, user_dict)
         html_body, plain_text = build_html_email(
             first_name, doc['doc_number'], doc['doc_type'], logo_path, user_dict,
             body_text=body_text,
         )
-        msg = _build_mime_message(
-            to_email, subject, html_body, plain_text,
-            pdf_bytes, pdf_filename, logo_path, user_dict,
-        )
 
         gmail = _get_gmail_service()
+        to_joined = ', '.join(recipient_emails)
+        msg = _build_mime_message(
+            to_joined, subject, html_body, plain_text,
+            pdf_bytes, pdf_filename, logo_path, user_dict,
+        )
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         gmail.users().messages().send(userId='me', body={'raw': raw}).execute()
 
-        db.execute(
-            "INSERT INTO sent_log (doc_id,recipient_email,subject,status) VALUES (?,?,?,?)",
-            (doc_id, to_email, subject, 'sent'),
-        )
+        for addr in recipient_emails:
+            db.execute(
+                "INSERT INTO sent_log (doc_id,recipient_email,subject,status) VALUES (?,?,?,?)",
+                (doc_id, addr, subject, 'sent'),
+            )
         db.execute(
             "UPDATE documents SET status='sent' WHERE id=? AND user_id=? AND status='pending'",
             (doc_id, current_user.id),
@@ -2107,8 +2234,9 @@ def send_document(doc_id):
         db.commit()
         db.close()
 
+        to_display = to_joined if len(recipient_emails) <= 2 else f'{recipient_emails[0]} +{len(recipient_emails)-1} more'
         flash(
-            f'Email sent to {to_email} on {datetime.now().strftime("%B %d, %Y at %H:%M")}.',
+            f'Email sent to {to_display} on {datetime.now().strftime("%B %d, %Y at %H:%M")}.',
             'success',
         )
         return redirect(url_for('document_view', doc_id=doc_id))
@@ -2116,16 +2244,18 @@ def send_document(doc_id):
     except Exception as e:
         db.execute(
             "INSERT INTO sent_log (doc_id,recipient_email,subject,status,error_message) VALUES (?,?,?,?,?)",
-            (doc_id, to_email, subject_raw, 'failed', str(e)),
+            (doc_id, ', '.join(recipient_emails), subject_raw, 'failed', str(e)),
         )
         db.commit()
         db.close()
 
         return render_template('send_email.html',
                                doc=doc, client=client,
+                               doc_clients=doc_clients,
+                               recipients_default=recipients_default,
+                               all_clients=all_clients,
                                subject_tpl=subject_raw, body_tpl=body_raw,
                                pdf_filename=pdf_filename,
-                               to_email=to_email,
                                error=str(e))
 
 

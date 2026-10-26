@@ -61,6 +61,9 @@ if (lineItemsBody) {
     });
     syncHidden();
     recalc();
+    // Notify save-button gating (new_document multi-client)
+    window._lineItemCount = lineItems.length;
+    if (typeof window._syncSaveBtn === 'function') window._syncSaveBtn();
   }
 
   // ── Sync hidden input ────────────────────────────────────────────────────────

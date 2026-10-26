@@ -30,15 +30,19 @@
   <div class="bill-to-section">
     <div class="bill-to">
       <h3>Received From</h3>
-      {% if client.company_name %}<p><strong>{{ client.company_name }}</strong></p><p>{{ client.name or '' }}</p>{% else %}<p><strong>{{ client.name or '' }}</strong></p>{% endif %}
-      {% if client.email %}<p>{{ client.email }}</p>{% endif %}
-      {% if client.phone %}<p>{{ client.phone }}</p>{% endif %}
-      {% if client.address_line1 %}<p>{{ client.address_line1 }}</p>{% endif %}
-      {% if client.address_line2 %}<p>{{ client.address_line2 }}</p>{% endif %}
-      {% if client.city or client.state_region or client.zip %}
-        <p>{% if client.city %}{{ client.city }}{% endif %}{% if client.state_region %}, {{ client.state_region }}{% endif %}{% if client.zip %} {{ client.zip }}{% endif %}</p>
+      {% set bill_clients = clients if clients else ([client] if client else []) %}
+      {% for bc in bill_clients %}
+      {% if not loop.first %}<hr style="border:none;border-top:1px solid #e0d9cf;margin:6px 0;">{% endif %}
+      {% if bc.company_name %}<p><strong>{{ bc.company_name }}</strong></p><p>{{ bc.name or '' }}</p>{% else %}<p><strong>{{ bc.name or '' }}</strong></p>{% endif %}
+      {% if bc.email %}<p>{{ bc.email }}</p>{% endif %}
+      {% if bc.phone %}<p>{{ bc.phone }}</p>{% endif %}
+      {% if bc.address_line1 %}<p>{{ bc.address_line1 }}</p>{% endif %}
+      {% if bc.address_line2 %}<p>{{ bc.address_line2 }}</p>{% endif %}
+      {% if bc.city or bc.state_region or bc.zip %}
+        <p>{% if bc.city %}{{ bc.city }}{% endif %}{% if bc.state_region %}, {{ bc.state_region }}{% endif %}{% if bc.zip %} {{ bc.zip }}{% endif %}</p>
       {% endif %}
-      {% if client.country %}<p>{{ client.country }}</p>{% endif %}
+      {% if bc.country %}<p>{{ bc.country }}</p>{% endif %}
+      {% endfor %}
     </div>
     <div class="doc-meta">
       <div><strong>Date:</strong> {{ doc.date_issued }}</div>

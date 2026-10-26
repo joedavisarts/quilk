@@ -134,7 +134,18 @@ def _bank_rows(details_str):
     return rows
 
 
-def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
+def generate_pdf(doc: dict, client, user: dict) -> bytes:
+    """Generate a PDF.  may be a single dict (legacy) or a list of dicts
+    for multi-client documents. Templates receive both  (first/primary)
+    and  (full list) so existing single-client templates keep working."""
+    # Normalise: always work with a list internally
+    if isinstance(client, list):
+        clients_list = client
+    else:
+        clients_list = [client] if client else []
+
+    primary_client = clients_list[0] if clients_list else {}
+
     doc_type = doc['doc_type']
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     env.filters['format_date'] = _format_date
@@ -157,9 +168,15 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
     if not doc_ctx.get('project_total'):
         doc_ctx['project_total'] = (doc_ctx.get('subtotal') or 0) - (doc_ctx.get('project_discount') or 0)
 
-    # Build client context: apply US state abbreviation for PDF display
-    client_ctx = dict(client)
-    client_ctx['state_region'] = _abbr_state_for_pdf(client)
+    # Build client contexts with US state abbreviation
+    clients_ctx = []
+    for c in clients_list:
+        cc = dict(c)
+        cc['state_region'] = _abbr_state_for_pdf(c)
+        clients_ctx.append(cc)
+
+    # Legacy single-client alias
+    client_ctx = clients_ctx[0] if clients_ctx else {}
 
     if user.get('username') == 'aureum':
         env.filters['bank_rows'] = _bank_rows
@@ -185,6 +202,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
         html_str = template.render(
             doc=doc_ctx,
             client=client_ctx,
+            clients=clients_ctx,
             user=user_ctx,
             doc_title=doc_title,
             aureum_logo_b64=_logo_b64_for_file('aureum_luxe_logo.png'),
@@ -195,6 +213,7 @@ def generate_pdf(doc: dict, client: dict, user: dict) -> bytes:
         html_str = template.render(
             doc=doc_ctx,
             client=client_ctx,
+            clients=clients_ctx,
             logo_b64=_logo_b64_for_file(user.get('logo_filename')),
             logotype_b64=_logo_b64_for_file(user.get('logotype_filename')),
             user=user_ctx,
