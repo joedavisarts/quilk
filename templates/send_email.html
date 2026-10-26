@@ -33,8 +33,8 @@
 
       <!-- PDF addressed-to multi-select (shown when 2+ doc clients) -->
       <div class="field" id="pdf-client-field" style="display:none;">
-        <label>PDF addressed to</label>
-        <div id="pdf-client-checkboxes" style="display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+        <label>Client(s) displayed on PDF</label>
+        <div id="pdf-client-checkboxes" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
         <div id="pdf-no-client-warning" class="flash flash-error" style="display:none;margin-top:8px;">
           PDF needs at least one client addressed to — please select at least one above.
         </div>
@@ -142,7 +142,7 @@ function insertToken(token) {
     pdfCBs.innerHTML = '';
     DOC_CLIENTS.forEach((c, i) => {
       const wrap = document.createElement('label');
-      wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;';
+      wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;width:100%;min-width:0;';
       const cb = document.createElement('input');
       cb.type = 'checkbox'; cb.name = 'pdf_client_ids'; cb.value = c.id; cb.checked = (i === 0);
       cb.addEventListener('change', () => {

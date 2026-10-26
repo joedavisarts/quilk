@@ -348,7 +348,8 @@ const DOC_TYPE = "{{ doc_type }}";
         ${added ? '<span class="cl-row-check">✓</span>' : ''}`;
       if (!added) {
         row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
+        row.addEventListener('mousedown', e => {
+          e.preventDefault();
           addClient(c.id, labelMap[c.id]);
           closeLightbox();
         });
@@ -368,7 +369,7 @@ const DOC_TYPE = "{{ doc_type }}";
     lightbox.classList.add('hidden');
   }
 
-  document.getElementById('add-client-pill-btn').addEventListener('click', openLightbox);
+  document.getElementById('add-client-pill-btn').addEventListener('click', e => { e.stopPropagation(); openLightbox(); });
   document.getElementById('cl-close-btn').addEventListener('click', closeLightbox);
   document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);
   lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
@@ -434,6 +435,8 @@ const DOC_TYPE = "{{ doc_type }}";
   const origSync = syncSaveBtn;
   window._syncSaveBtn = syncSaveBtn;
   syncSaveBtn(); // initial state
+  // Re-sync after app.js renderRows() has a chance to run
+  requestAnimationFrame(() => syncSaveBtn());
 })();
 </script>
 {% endblock %}
