@@ -1794,6 +1794,7 @@ def generate_invoice(doc_id):
         (doc_id, current_user.id),
     ).fetchone())
     root_doc_id = doc_id  # used as source_document_id on the new invoice
+    _inherited_job_id = None
     if not anchor and invoice_type == 'balance':
         # Allow balance invoice generation from a paid deposit receipt
         receipt = _row_to_dict(db.execute(
@@ -1815,11 +1816,13 @@ def generate_invoice(doc_id):
             if cur_doc.get('doc_type') in ('quote', 'invoice') and not cur_doc.get('source_document_id'):
                 anchor = cur_doc
                 root_doc_id = cur_doc['id']
+                # Inherit job_id from the receipt chain so we find existing paid deposits
+                _inherited_job_id = receipt.get('job_id')
     if not anchor:
         db.close()
         abort(400)
 
-    job_id = anchor.get('job_id') or str(uuid.uuid4())
+    job_id = anchor.get('job_id') or _inherited_job_id or str(uuid.uuid4())
 
     # Load job docs for gating checks
     job_docs = _rows_to_list(db.execute(
