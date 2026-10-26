@@ -1785,13 +1785,36 @@ def generate_invoice(doc_id):
 
     db = get_db()
 
-    # The anchor must be an accepted quote OR a standalone invoice owned by this user
+    # The anchor must be an accepted quote OR a standalone invoice owned by this user.
+    # Also accept a deposit receipt — walk up the source chain to find the root quote.
     anchor = _row_to_dict(db.execute(
         "SELECT * FROM documents WHERE id=? AND user_id=?"
         " AND ((doc_type='quote' AND status='accepted')"
         "      OR (doc_type='invoice' AND source_document_id IS NULL))",
         (doc_id, current_user.id),
     ).fetchone())
+    root_doc_id = doc_id  # used as source_document_id on the new invoice
+    if not anchor and invoice_type == 'balance':
+        # Allow balance invoice generation from a paid deposit receipt
+        receipt = _row_to_dict(db.execute(
+            "SELECT * FROM documents WHERE id=? AND user_id=?"
+            " AND doc_type='receipt' AND invoice_type='deposit'",
+            (doc_id, current_user.id),
+        ).fetchone())
+        if receipt:
+            # Walk up the source chain to find the root quote / standalone invoice
+            cur_doc = receipt
+            while cur_doc.get('source_document_id'):
+                parent = _row_to_dict(db.execute(
+                    "SELECT * FROM documents WHERE id=? AND user_id=?",
+                    (cur_doc['source_document_id'], current_user.id),
+                ).fetchone())
+                if not parent:
+                    break
+                cur_doc = parent
+            if cur_doc.get('doc_type') in ('quote', 'invoice') and not cur_doc.get('source_document_id'):
+                anchor = cur_doc
+                root_doc_id = cur_doc['id']
     if not anchor:
         db.close()
         abort(400)
@@ -1805,7 +1828,7 @@ def generate_invoice(doc_id):
         (job_id, current_user.id),
     ).fetchall())
 
-    can_full, can_balance = _job_capabilities(job_docs, doc_id)
+    can_full, can_balance = _job_capabilities(job_docs, anchor['id'])
 
     if invoice_type == 'full' and not can_full:
         db.close()
@@ -1863,7 +1886,7 @@ def generate_invoice(doc_id):
          anchor['currency'], anchor['line_items'], anchor['subtotal'],
          anchor['discount'], anchor['tax_amount'], 0,
          amount_due, 'pending', anchor['notes'],
-         doc_id, current_user.id, job_id, invoice_type,
+         root_doc_id, current_user.id, job_id, invoice_type,
          deposit_amount_stored, deposit_type_stored, pay_by_date,
          project_discount, project_total),
     )
@@ -1871,12 +1894,18 @@ def generate_invoice(doc_id):
     # Copy all multi-client junction rows from the source document
     src_clients = db.execute(
         'SELECT client_uuid, display_order FROM document_clients WHERE doc_id=? ORDER BY display_order',
-        (doc_id,),
+        (root_doc_id,),
     ).fetchall()
     for row in src_clients:
         db.execute(
             'INSERT INTO document_clients (doc_id, client_uuid, display_order) VALUES (?, ?, ?)',
             (invoice_id, row[0], row[1]),
+        )
+    # Propagate job_id back to the root source doc if it didn't have one yet
+    if not anchor.get('job_id'):
+        db.execute(
+            "UPDATE documents SET job_id=? WHERE id=? AND user_id=?",
+            (job_id, anchor['id'], current_user.id),
         )
     db.commit()
     _sync_gig_financials(db, job_id, current_user.id)

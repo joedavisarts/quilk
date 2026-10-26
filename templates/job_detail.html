@@ -201,9 +201,7 @@
       <div class="job-doc-top">
         <a href="{{ url_for('document_view', doc_id=d.id) }}" class="job-doc-num">{{ d.doc_number }}</a>
         <span class="badge badge-{{ d.doc_type }}">
-          {% if d.invoice_type == 'deposit' %}deposit inv
-          {% elif d.invoice_type == 'balance' %}balance inv
-          {% elif d.invoice_type == 'full' %}full inv
+          {% if d.doc_type == 'receipt' %}{% if d.invoice_type == 'deposit' %}deposit rec{% elif d.invoice_type == 'balance' %}balance rec{% else %}receipt{% endif %}{% elif d.invoice_type == 'deposit' %}deposit inv{% elif d.invoice_type == 'balance' %}balance inv{% elif d.invoice_type == 'full' %}full inv
           {% else %}{{ d.doc_type }}{% endif %}
         </span>
       </div>

@@ -105,6 +105,35 @@
   </div>
 </div>
 
+{# ── Balance-invoice-from-receipt modal ────────────────────────────────── #}
+{% if doc.doc_type == 'receipt' and doc.invoice_type == 'deposit' %}
+<div class="modal-overlay hidden" id="balance-from-receipt-modal">
+  <div class="modal-card" style="width:380px;max-width:95vw;">
+    <div class="modal-header">
+      <h3>Balance Invoice</h3>
+      <button class="modal-close" onclick="document.getElementById('balance-from-receipt-modal').classList.add('hidden')">&times;</button>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-size:13.5px;color:var(--text-muted);margin-bottom:18px;">
+        Creates a balance invoice for the remaining amount on this job.
+      </p>
+      <form method="POST" action="{{ url_for('generate_invoice', doc_id=doc.id) }}">
+        <input type="hidden" name="invoice_type" value="balance">
+        <div class="form-group">
+          <label class="form-label">Payment Due Date (optional)</label>
+          <input type="date" name="pay_by_date" class="form-control">
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+          <button type="button" class="btn btn-outline"
+                  onclick="document.getElementById('balance-from-receipt-modal').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn btn-gold">Create Balance Invoice</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# ── Reassign modal ─────────────────────────────────────────────────────── #}
 {% if doc.job_id and other_jobs %}
 <div class="modal-overlay hidden" id="reassign-modal">
@@ -140,9 +169,7 @@
     <h1>{{ doc.doc_number }}</h1>
     <span class="page-sub">
       <span class="badge badge-{{ doc.doc_type }}">
-        {% if doc.invoice_type == 'deposit' %}deposit inv
-        {% elif doc.invoice_type == 'balance' %}balance inv
-        {% else %}{{ doc.doc_type }}{% endif %}
+        {% if doc.doc_type == 'receipt' %}{% if doc.invoice_type == 'deposit' %}deposit rec{% elif doc.invoice_type == 'balance' %}balance rec{% else %}receipt{% endif %}{% elif doc.invoice_type == 'deposit' %}deposit inv{% elif doc.invoice_type == 'balance' %}balance inv{% else %}{{ doc.doc_type }}{% endif %}
       </span>
       &nbsp;
       <span class="status status-{{ doc.status }}">{{ doc.status }}</span>
@@ -218,6 +245,14 @@
     <form method="POST" action="{{ url_for('generate_receipt_from_invoice', doc_id=doc.id) }}" style="display:inline">
       <button type="submit" class="btn btn-gold">Generate Receipt</button>
     </form>
+    {% endif %}
+
+    {# ── Balance invoice from a paid deposit receipt ── #}
+    {% if doc.doc_type == 'receipt' and doc.invoice_type == 'deposit' and not doc.voided and can_generate_balance %}
+    <button type="button" class="btn btn-gold"
+            onclick="document.getElementById('balance-from-receipt-modal').classList.remove('hidden')">
+      Generate Balance Invoice
+    </button>
     {% endif %}
 
     {# Void / Un-void #}
@@ -514,7 +549,7 @@ function submitWithDueDate() {
 }
 
 // Close modals on overlay click
-['due-date-modal','deposit-modal','void-modal','reassign-modal'].forEach(function(id) {
+['due-date-modal','deposit-modal','void-modal','reassign-modal','balance-from-receipt-modal'].forEach(function(id) {
   var el = document.getElementById(id);
   if (el) el.addEventListener('click', function(e) {
     if (e.target === el) el.classList.add('hidden');

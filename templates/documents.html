@@ -72,9 +72,7 @@
           <td class="doc-number strong" style="color:var(--gold);">{{ doc.doc_number }}</td>
           <td>
             <span class="badge badge-{{ doc.doc_type }}">
-              {% if doc.invoice_type == 'deposit' %}deposit inv
-              {% elif doc.invoice_type == 'balance' %}balance inv
-              {% else %}{{ doc.doc_type }}{% endif %}
+              {% if doc.doc_type == 'receipt' %}{% if doc.invoice_type == 'deposit' %}deposit rec{% elif doc.invoice_type == 'balance' %}balance rec{% else %}receipt{% endif %}{% elif doc.invoice_type == 'deposit' %}deposit inv{% elif doc.invoice_type == 'balance' %}balance inv{% else %}{{ doc.doc_type }}{% endif %}
             </span>
           </td>
           <td>{{ doc.client_name or '—' }}</td>
@@ -109,9 +107,7 @@
         <div class="card-name" style="color:var(--gold);">{{ doc.doc_number }}</div>
         <div style="margin-bottom:6px;">
           <span class="badge badge-{{ doc.doc_type }}" style="font-size:11px;">
-            {% if doc.invoice_type == 'deposit' %}deposit inv
-            {% elif doc.invoice_type == 'balance' %}balance inv
-            {% else %}{{ doc.doc_type }}{% endif %}
+            {% if doc.doc_type == 'receipt' %}{% if doc.invoice_type == 'deposit' %}deposit rec{% elif doc.invoice_type == 'balance' %}balance rec{% else %}receipt{% endif %}{% elif doc.invoice_type == 'deposit' %}deposit inv{% elif doc.invoice_type == 'balance' %}balance inv{% else %}{{ doc.doc_type }}{% endif %}
           </span>
         </div>
         <div class="card-meta">
