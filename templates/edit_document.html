@@ -155,17 +155,83 @@ const EDIT_LINE_ITEMS = {{ doc.line_items | tojson }};
 
   <!-- Client lightbox -->
   <div class="modal-overlay hidden" id="client-lightbox">
-    <div class="modal-card" style="max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
-      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">
-        <span style="font-weight:600;">Add Client</span>
+    <div class="modal-card" style="max-width:480px;width:90%;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <span id="cl-header-title" style="font-weight:600;">Add Client</span>
         <button type="button" id="cl-close-btn" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);">&times;</button>
       </div>
-      <div style="padding:12px 20px;border-bottom:1px solid var(--border);">
-        <input type="text" id="cl-search" placeholder="Search clients…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:14px;" autocomplete="off" />
+
+      <!-- Search view -->
+      <div id="cl-search-view" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <input type="text" id="cl-search" placeholder="Search clients…" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:14px;" autocomplete="off" />
+        </div>
+        <div id="cl-body" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+          <button type="button" id="cl-new-btn" class="btn btn-sm btn-outline" style="font-size:12px;">+ New Client</button>
+          <button type="button" id="cl-cancel-btn" class="btn btn-sm btn-outline">Cancel</button>
+        </div>
       </div>
-      <div id="cl-body" style="overflow-y:auto;flex:1;padding:8px 0;"></div>
-      <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;">
-        <button type="button" id="cl-cancel-btn" class="btn btn-sm btn-outline">Cancel</button>
+
+      <!-- Create-new view (hidden by default) -->
+      <div id="cl-create-view" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div style="overflow-y:auto;flex:1;padding:16px 20px;">
+          <div id="cl-create-status" style="display:none;font-size:12.5px;margin-bottom:12px;padding:8px 12px;border-radius:6px;"></div>
+          <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Company Name</label>
+              <input type="text" id="cl-nc-company" placeholder="Acme Corp" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Contact Name</label>
+              <input type="text" id="cl-nc-name" placeholder="Full name" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Email</label>
+              <input type="email" id="cl-nc-email" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Phone</label>
+              <input type="text" id="cl-nc-phone" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address Line 1</label>
+            <input type="text" id="cl-nc-addr1" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address Line 2</label>
+            <input type="text" id="cl-nc-addr2" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">City</label>
+              <input type="text" id="cl-nc-city" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">State / Region</label>
+              <input type="text" id="cl-nc-state" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:4px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Zip / Postcode</label>
+              <input type="text" id="cl-nc-zip" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Country</label>
+              <input type="text" id="cl-nc-country" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;" />
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+          <button type="button" id="cl-back-btn" class="btn btn-sm btn-outline" style="font-size:12px;">← Back</button>
+          <button type="button" id="cl-save-new-btn" class="btn btn-sm btn-gold">Save &amp; Add</button>
+        </div>
       </div>
     </div>
   </div>
@@ -273,7 +339,43 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
     });
   }
 
-  function openLightbox() { clSearch.value = ''; renderLightbox(''); lightbox.classList.remove('hidden'); requestAnimationFrame(() => clSearch.focus()); }
+  const searchView = document.getElementById('cl-search-view');
+  const createView = document.getElementById('cl-create-view');
+  const headerTitle = document.getElementById('cl-header-title');
+  const createStatus = document.getElementById('cl-create-status');
+
+  function showSearchView() {
+    searchView.style.display = 'flex';
+    createView.style.display = 'none';
+    headerTitle.textContent = 'Add Client';
+    createStatus.style.display = 'none';
+  }
+
+  function showCreateView() {
+    searchView.style.display = 'none';
+    createView.style.display = 'flex';
+    headerTitle.textContent = 'New Client';
+    requestAnimationFrame(() => document.getElementById('cl-nc-company').focus());
+  }
+
+  function clearCreateForm() {
+    ['cl-nc-company','cl-nc-name','cl-nc-email','cl-nc-phone',
+     'cl-nc-addr1','cl-nc-addr2','cl-nc-city','cl-nc-state',
+     'cl-nc-zip','cl-nc-country'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    createStatus.style.display = 'none';
+  }
+
+  function openLightbox() {
+    clSearch.value = '';
+    renderLightbox('');
+    showSearchView();
+    clearCreateForm();
+    lightbox.classList.remove('hidden');
+    requestAnimationFrame(() => clSearch.focus());
+  }
   function closeLightbox() { lightbox.classList.add('hidden'); }
 
   document.getElementById('add-client-pill-btn').addEventListener('click', e => { e.stopPropagation(); openLightbox(); });
@@ -281,6 +383,56 @@ const PREFILL_CLIENTS = {{ (selected_clients or []) | tojson }};
   document.getElementById('cl-cancel-btn').addEventListener('click', closeLightbox);
   lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
   clSearch.addEventListener('input', () => renderLightbox(clSearch.value));
+
+  document.getElementById('cl-new-btn').addEventListener('click', showCreateView);
+  document.getElementById('cl-back-btn').addEventListener('click', showSearchView);
+
+  document.getElementById('cl-save-new-btn').addEventListener('click', async () => {
+    const company = document.getElementById('cl-nc-company').value.trim();
+    const name    = document.getElementById('cl-nc-name').value.trim();
+    if (!company && !name) {
+      createStatus.textContent = 'Please enter at least a company name or contact name.';
+      createStatus.style.background = 'rgba(220,50,50,0.12)';
+      createStatus.style.color = '#e05';
+      createStatus.style.display = 'block';
+      return;
+    }
+    const saveBtn = document.getElementById('cl-save-new-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    createStatus.style.display = 'none';
+    try {
+      const resp = await fetch('/api/clients/create-quick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_name:  company,
+          name:          name,
+          email:         document.getElementById('cl-nc-email').value.trim(),
+          phone:         document.getElementById('cl-nc-phone').value.trim(),
+          address_line1: document.getElementById('cl-nc-addr1').value.trim(),
+          address_line2: document.getElementById('cl-nc-addr2').value.trim(),
+          city:          document.getElementById('cl-nc-city').value.trim(),
+          state_region:  document.getElementById('cl-nc-state').value.trim(),
+          zip:           document.getElementById('cl-nc-zip').value.trim(),
+          country:       document.getElementById('cl-nc-country').value.trim(),
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Server error');
+      ALL_CLIENTS.push({ id: data.id, display_name: data.label, email: '', city: '' });
+      addClient(data.id, data.label);
+      closeLightbox();
+    } catch (err) {
+      createStatus.textContent = err.message || 'Something went wrong.';
+      createStatus.style.background = 'rgba(220,50,50,0.12)';
+      createStatus.style.color = '#e05';
+      createStatus.style.display = 'block';
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save & Add';
+    }
+  });
 })();
 </script>
 {% endblock %}
