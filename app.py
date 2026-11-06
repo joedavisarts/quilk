@@ -802,6 +802,8 @@ def new_document(doc_type):
         subtotal, discount, tax_amount, amount_due = _compute_totals(
             line_items, discount_val, discount_type, paid_amount
         )
+        project_discount = discount
+        project_total = subtotal - project_discount
 
         prefix = getattr(current_user, f'doc_prefix_{doc_type}')
         doc_number = next_doc_number(doc_type, current_user.id, prefix)
@@ -811,12 +813,13 @@ def new_document(doc_type):
         cur = db.execute(
             "INSERT INTO documents (doc_type,doc_number,client_uuid,date_issued,"
             "currency,line_items,subtotal,discount,tax_amount,paid_amount,"
-            "amount_due,status,notes,pay_by_date,user_id,job_id) VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "amount_due,status,notes,pay_by_date,user_id,job_id,"
+            "project_discount,project_total) VALUES "
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (doc_type, doc_number, client_uuid, doc_date, currency,
              json.dumps(line_items), subtotal, discount, tax_amount,
              paid_amount, amount_due, 'pending', notes, pay_by_date,
-             current_user.id, job_id),
+             current_user.id, job_id, project_discount, project_total),
         )
         doc_id = cur.lastrowid
         db.commit()
@@ -2132,14 +2135,18 @@ def edit_document(doc_id):
         subtotal, discount, tax_amount, amount_due = _compute_totals(
             line_items, discount_val, discount_type, paid_amount
         )
+        project_discount = discount
+        project_total = subtotal - project_discount
 
         db.execute(
             "UPDATE documents SET client_uuid=?,date_issued=?,currency=?,line_items=?,"
             "subtotal=?,discount=?,tax_amount=?,paid_amount=?,amount_due=?,"
-            "notes=?,pay_by_date=?,status=? WHERE id=? AND user_id=?",
+            "notes=?,pay_by_date=?,status=?,project_discount=?,project_total=?"
+            " WHERE id=? AND user_id=?",
             (client_uuid, doc_date, currency, json.dumps(line_items),
              subtotal, discount, tax_amount, paid_amount, amount_due,
-             notes, pay_by_date, status, doc_id, current_user.id),
+             notes, pay_by_date, status, project_discount, project_total,
+             doc_id, current_user.id),
         )
         db.commit()
 
