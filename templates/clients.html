@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import country_select %}
 {% block title %}Clients — Quilk{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -184,7 +185,7 @@
         </div>
         <div class="field">
           <label>Country</label>
-          <input type="text" name="country" autocomplete="country-name" />
+          {{ country_select('country') }}
         </div>
       </div>
       <div class="field">
