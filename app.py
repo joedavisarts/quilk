@@ -2392,6 +2392,16 @@ def remind_document(doc_id):
     pdf_filename = _pdf_email_filename(doc['doc_number'])
     to_email = client.get('email', '')
 
+    # All clients for the add-recipient lightbox
+    all_clients = _sb_clients_for_user(current_user.id)
+    all_labels = _client_display_labels_from_list(all_clients)
+    for c in all_clients:
+        c['display_name'] = all_labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+    all_clients.sort(key=lambda c: (c.get('display_name') or '').lower())
+    recipients_default = [
+        {'id': client.get('id',''), 'label': client.get('display_name') or client.get('company_name') or client.get('name') or '', 'email': to_email}
+    ] if to_email else []
+
     if request.method == 'GET':
         return render_template('send_email.html',
                                doc=doc, client=client,
@@ -2399,6 +2409,8 @@ def remind_document(doc_id):
                                pdf_filename=pdf_filename,
                                to_email=to_email,
                                is_reminder=True,
+                               recipients_default=recipients_default,
+                               all_clients=all_clients,
                                error=None)
 
     to_email = request.form.get('to_email', '').strip()
