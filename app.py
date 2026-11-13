@@ -1247,7 +1247,7 @@ def jobs():
         "SELECT d.id, d.job_id, d.doc_type, d.doc_number, d.status, d.voided,"
         " d.invoice_type, d.amount_due, d.paid_amount, d.subtotal, d.discount,"
         " d.tax_amount, d.source_document_id, d.created_at, d.pay_by_date,"
-        " d.client_uuid, d.currency"
+        " d.client_uuid, d.currency, d.project_discount, d.project_total"
         " FROM documents d"
         " WHERE d.user_id=? AND d.job_id IS NOT NULL AND d.discarded=0"
         " ORDER BY d.created_at ASC",
@@ -1671,7 +1671,7 @@ def document_view(doc_id):
             "SELECT d.id, d.doc_type, d.doc_number, d.status, d.voided,"
             " d.invoice_type, d.amount_due, d.paid_amount, d.source_document_id,"
             " d.subtotal, d.discount, d.tax_amount, d.job_id, d.created_at,"
-            " d.pay_by_date, d.client_uuid"
+            " d.pay_by_date, d.client_uuid, d.currency, d.project_discount, d.project_total"
             " FROM documents d"
             " WHERE d.job_id=? AND d.user_id=? AND d.discarded=0 ORDER BY d.created_at",
             (job_id, current_user.id),
