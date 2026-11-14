@@ -2413,13 +2413,38 @@ def remind_document(doc_id):
                                all_clients=all_clients,
                                error=None)
 
-    to_email = request.form.get('to_email', '').strip()
+    recipient_emails_raw = request.form.getlist('recipient_emails')
+    recipient_emails = [e.strip() for e in recipient_emails_raw if e.strip()]
+    if not recipient_emails:
+        single = request.form.get('to_email', '').strip()
+        if single:
+            recipient_emails = [single]
+    to_email = ', '.join(recipient_emails)
     subject_raw = request.form.get('subject', subject_tpl).strip()
     body_raw = request.form.get('body_text', body_tpl).strip()
     subject = _resolve_placeholders(subject_raw, doc, client, user_dict)
     body_text = _resolve_placeholders(body_raw, doc, client, user_dict)
     _email_logo = 'chromatics_logo_email.png' if current_user.username == 'chromatics' else (current_user.logo_filename or 'logo.png')
     logo_path = os.path.join(ASSETS_DIR, _email_logo)
+
+    if not recipient_emails:
+        all_clients = _sb_clients_for_user(current_user.id)
+        all_labels = _client_display_labels_from_list(all_clients)
+        for c in all_clients:
+            c['display_name'] = all_labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+        all_clients.sort(key=lambda c: (c.get('display_name') or '').lower())
+        recipients_default = [
+            {'id': client.get('id',''), 'label': client.get('display_name') or client.get('company_name') or client.get('name') or '', 'email': client.get('email','')}
+        ] if client.get('email') else []
+        return render_template('send_email.html',
+                               doc=doc, client=client,
+                               subject_tpl=subject_raw, body_tpl=body_raw,
+                               pdf_filename=pdf_filename,
+                               to_email='',
+                               is_reminder=True,
+                               recipients_default=recipients_default,
+                               all_clients=all_clients,
+                               error='Please add at least one recipient.')
 
     db = get_db()
     try:
@@ -2458,12 +2483,20 @@ def remind_document(doc_id):
         db.commit()
         db.close()
 
+        all_clients = _sb_clients_for_user(current_user.id)
+        all_labels = _client_display_labels_from_list(all_clients)
+        for c in all_clients:
+            c['display_name'] = all_labels.get(c['id'], c.get('company_name') or c.get('name') or '')
+        all_clients.sort(key=lambda c: (c.get('display_name') or '').lower())
+        recipients_default = [{'id': '', 'label': e, 'email': e} for e in recipient_emails]
         return render_template('send_email.html',
                                doc=doc, client=client,
                                subject_tpl=subject_raw, body_tpl=body_raw,
                                pdf_filename=pdf_filename,
                                to_email=to_email,
                                is_reminder=True,
+                               recipients_default=recipients_default,
+                               all_clients=all_clients,
                                error=str(e))
 
 
